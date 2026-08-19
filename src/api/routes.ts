@@ -822,7 +822,7 @@ export async function syncGlobalTransactionsFromFirestore() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const updateStmt = db.prepare(`
-      UPDATE transactions SET status = ?, updated_at = datetime('now') WHERE id = ? AND status != ?
+      UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status != ?
     `);
 
     // 1. Sync Deposits
@@ -861,7 +861,7 @@ export async function syncGlobalTransactionsFromFirestore() {
           if (!existingTx) {
             insertStmt.run(userId, 'deposit', amount, status, method, txHash, currency, JSON.stringify(detailsObj), createdTime);
           } else {
-            updateStmt.run(status, (existingTx as any).id, status);
+            updateStmt.run(status, Date.now(), (existingTx as any).id, status);
           }
         }
       }).catch(txErr => {
@@ -906,7 +906,7 @@ export async function syncGlobalTransactionsFromFirestore() {
           if (!existingTx) {
             insertStmt.run(userId, 'withdrawal', amount, status, method, txHash, currency, JSON.stringify(detailsObj), createdTime);
           } else {
-            updateStmt.run(status, (existingTx as any).id, status);
+            updateStmt.run(status, Date.now(), (existingTx as any).id, status);
           }
         }
       }).catch(txErr => {

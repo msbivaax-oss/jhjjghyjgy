@@ -83,8 +83,8 @@ export async function syncUserTransactionsFromFirestore(userId: string) {
         );
       } else {
         await run(
-          `UPDATE transactions SET status = ?, updated_at = datetime('now') WHERE id = ? AND status != ?`,
-          [status, existingTx.id, status]
+          `UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status != ?`,
+          [status, Date.now(), existingTx.id, status]
         );
       }
     }
@@ -199,6 +199,25 @@ export async function authoritativeSync(userId: string, emitSocket = true) {
     const oldUser = await get('SELECT * FROM users WHERE uid = ?', [userId]) as any;
     let user = oldUser;
 
+    const rawFireRealBal = fireData.real_balance ?? fireData.realBalance ?? fireData.balance;
+    const fireRealBal = (rawFireRealBal !== undefined && rawFireRealBal !== null) ? parseFloat(rawFireRealBal.toString()) : null;
+    const oldRealBal = oldUser ? parseFloat((oldUser.real_balance ?? 0).toString()) : 0;
+    const finalRealBal = (fireRealBal !== null && !isNaN(fireRealBal))
+      ? (oldRealBal > 0 && fireRealBal === 0 ? oldRealBal : fireRealBal)
+      : oldRealBal;
+
+    const rawFireDemoBal = fireData.demo_balance ?? fireData.demoBalance;
+    const fireDemoBal = (rawFireDemoBal !== undefined && rawFireDemoBal !== null) ? parseFloat(rawFireDemoBal.toString()) : null;
+    const oldDemoBal = oldUser ? parseFloat((oldUser.demo_balance ?? 10000).toString()) : 10000;
+    const finalDemoBal = (fireDemoBal !== null && !isNaN(fireDemoBal)) ? fireDemoBal : oldDemoBal;
+
+    const rawFireAffBal = fireData.affiliate_balance ?? fireData.affiliateBalance;
+    const fireAffBal = (rawFireAffBal !== undefined && rawFireAffBal !== null) ? parseFloat(rawFireAffBal.toString()) : null;
+    const oldAffBal = oldUser ? parseFloat((oldUser.affiliate_balance ?? 0).toString()) : 0;
+    const finalAffBal = (fireAffBal !== null && !isNaN(fireAffBal))
+      ? (oldAffBal > 0 && fireAffBal === 0 ? oldAffBal : fireAffBal)
+      : oldAffBal;
+
     if (!user) {
       // Restore basic profile
       await run(
@@ -211,21 +230,21 @@ export async function authoritativeSync(userId: string, emitSocket = true) {
           userId,
           fireData.email || '',
           fireData.displayName || fireData.name || '',
-          fireData.balance || 0,
-          fireData.demoBalance || 10000,
-          fireData.kycStatus || 'unverified',
+          finalRealBal,
+          finalDemoBal,
+          fireData.kycStatus || fireData.kyc_status || 'unverified',
           (fireData.is_verified || fireData.isVerified || fireData.emailVerified) ? 1 : 0,
           fireData.country || '',
-          fireData.referralCode || '',
-          fireData.referredBy || '',
-          fireData.affiliateBalance || 0,
-          fireData.totalAffiliateEarnings || 0,
-          fireData.referralCount || 0
+          fireData.referralCode || fireData.referral_code || '',
+          fireData.referredBy || fireData.referred_by_uid || '',
+          finalAffBal,
+          fireData.totalAffiliateEarnings || fireData.total_affiliate_earnings || 0,
+          fireData.referralCount || fireData.referral_count || 0
         ]
       );
       user = await get('SELECT * FROM users WHERE uid = ?', [userId]);
     } else {
-      // Authoritatively update existing record
+      // Authoritatively update existing record without wiping positive balances
       await run(
         `UPDATE users SET 
           real_balance = ?, demo_balance = ?, kyc_status = ?, is_verified = ?,
@@ -233,15 +252,15 @@ export async function authoritativeSync(userId: string, emitSocket = true) {
           total_affiliate_earnings = ?, referral_count = ?
         WHERE uid = ?`,
         [
-          fireData.balance || 0,
-          fireData.demoBalance || 10000,
-          fireData.kycStatus || 'unverified',
-          (fireData.is_verified || fireData.isVerified || fireData.emailVerified) ? 1 : 0,
+          finalRealBal,
+          finalDemoBal,
+          fireData.kycStatus || fireData.kyc_status || user.kyc_status || 'unverified',
+          (fireData.is_verified || fireData.isVerified || fireData.emailVerified || user.is_verified) ? 1 : 0,
           fireData.displayName || fireData.name || user.display_name,
           fireData.country || user.country,
-          fireData.affiliateBalance || 0,
-          fireData.totalAffiliateEarnings || 0,
-          fireData.referralCount || 0,
+          finalAffBal,
+          fireData.totalAffiliateEarnings || fireData.total_affiliate_earnings || user.total_affiliate_earnings || 0,
+          fireData.referralCount || fireData.referral_count || user.referral_count || 0,
           userId
         ]
       );

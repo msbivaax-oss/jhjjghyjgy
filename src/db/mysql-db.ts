@@ -32,6 +32,18 @@ function convertSqlForPg(sql: string): string {
     return `'${p1}'`;
   });
 
+  // Handle SQLite INSERT OR IGNORE -> PostgreSQL ON CONFLICT DO NOTHING
+  let isInsertOrIgnore = false;
+  if (/^INSERT\s+OR\s+IGNORE\s+INTO/i.test(normalizedSql.trim())) {
+    normalizedSql = normalizedSql.replace(/^INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT INTO');
+    isInsertOrIgnore = true;
+  }
+
+  // Handle SQLite functions
+  normalizedSql = normalizedSql
+    .replace(/datetime\('now'\)/gi, 'NOW()')
+    .replace(/IFNULL\(/gi, 'COALESCE(');
+
   let paramIndex = 1;
   let inString = false;
   let stringChar = '';
@@ -52,6 +64,11 @@ function convertSqlForPg(sql: string): string {
       result += char;
     }
   }
+
+  if (isInsertOrIgnore && !/ON\s+CONFLICT/i.test(result)) {
+    result += ' ON CONFLICT DO NOTHING';
+  }
+
   return result;
 }
 
