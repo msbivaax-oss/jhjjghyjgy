@@ -84,7 +84,7 @@ async function callTool(name: string, args: any, userId: string) {
       return { transactions: txs, summary };
     case "getTradeHistory":
       const trades = await query('SELECT asset, amount, direction, entry_price, exit_price, status, payout_amount, created_at FROM trades WHERE user_id = ? ORDER BY created_at DESC LIMIT 10', [userId]);
-      const stats = await get('SELECT COUNT(*) as total, SUM(CASE WHEN status = "won" THEN 1 ELSE 0 END) as won, SUM(amount) as total_volume FROM trades WHERE user_id = ?', [userId]);
+      const stats = await get("SELECT COUNT(*) as total, SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as won, SUM(amount) as total_volume FROM trades WHERE user_id = ?", [userId]);
       return { trades, stats };
     default:
       throw new Error(`Unknown tool: ${name}`);

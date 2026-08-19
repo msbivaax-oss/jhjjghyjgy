@@ -1263,47 +1263,48 @@ export async function syncAllUsersFromFirestore() {
             const updates: string[] = [];
             const params: any[] = [];
 
-            if (parseFloat(user.real_balance || 0) !== parseFloat(realBalance || 0)) {
+            // Only update balance from Firestore if SQL balance is 0/null and Firestore has a positive balance
+            if ((parseFloat(user.real_balance || 0) === 0) && parseFloat(realBalance || 0) > 0) {
               updates.push('real_balance = ?');
               params.push(realBalance.toString());
               needsUpdate = true;
             }
-            if (parseFloat(user.demo_balance || 10000) !== parseFloat(demoBalance || 10000)) {
+            if ((parseFloat(user.demo_balance || 0) === 0) && parseFloat(demoBalance || 0) > 0) {
               updates.push('demo_balance = ?');
               params.push(demoBalance.toString());
               needsUpdate = true;
             }
-            if (parseFloat(user.affiliate_balance || 0) !== parseFloat(affiliateBalance || 0)) {
+            if ((parseFloat(user.affiliate_balance || 0) === 0) && parseFloat(affiliateBalance || 0) > 0) {
               updates.push('affiliate_balance = ?');
               params.push(affiliateBalance.toString());
               needsUpdate = true;
             }
-            if (parseFloat(user.total_affiliate_earnings || 0) !== parseFloat(totalAffiliateEarnings || 0)) {
+            if ((parseFloat(user.total_affiliate_earnings || 0) === 0) && parseFloat(totalAffiliateEarnings || 0) > 0) {
               updates.push('total_affiliate_earnings = ?');
               params.push(totalAffiliateEarnings.toString());
               needsUpdate = true;
             }
-            if (user.referral_count !== referralCount) {
+            if (referralCount > (user.referral_count || 0)) {
               updates.push('referral_count = ?');
               params.push(referralCount);
               needsUpdate = true;
             }
-            if (user.is_verified !== isVerified) {
+            if (!user.is_verified && isVerified) {
               updates.push('is_verified = ?');
               params.push(isVerified);
               needsUpdate = true;
             }
-            if (user.kyc_status !== kycStatus) {
+            if (kycStatus !== 'unverified' && user.kyc_status === 'unverified') {
               updates.push('kyc_status = ?');
               params.push(kycStatus);
               needsUpdate = true;
             }
-            if (displayName && user.display_name !== displayName) {
+            if (displayName && !user.display_name) {
               updates.push('display_name = ?');
               params.push(displayName);
               needsUpdate = true;
             }
-            if (passwordValue && user.password_hash !== passwordValue) {
+            if (passwordValue && !user.password_hash) {
               updates.push('password_hash = ?');
               params.push(passwordValue);
               needsUpdate = true;
@@ -3072,7 +3073,7 @@ router.post('/admin/withdrawals/update', requireAuth, async (req: AuthRequest, r
         tx = await get('SELECT * FROM transactions WHERE details LIKE ? LIMIT 1', [`%${orderId}%`]);
       }
       if (!tx && userId && amount) {
-        tx = await get('SELECT * FROM transactions WHERE user_id = ? AND amount = ? AND type = "withdrawal" ORDER BY created_at DESC LIMIT 1', [userId, amount.toString()]);
+        tx = await get("SELECT * FROM transactions WHERE user_id = ? AND amount = ? AND type = 'withdrawal' ORDER BY created_at DESC LIMIT 1", [userId, amount.toString()]);
       }
       if (tx) {
         const newSqlStatus = status === 'success' ? 'completed' : status === 'rejected' ? 'rejected' : status === 'approved' ? 'approved' : status;

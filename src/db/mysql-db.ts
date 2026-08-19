@@ -25,13 +25,20 @@ class Mutex {
 const dbMutex = new Mutex();
 
 function convertSqlForPg(sql: string): string {
+  // Convert double-quoted string literals like "won" or "withdrawal" or "active" to single quotes 'won'
+  let normalizedSql = sql.replace(/"([a-zA-Z0-9_\-\s]+)"/g, (match, p1) => {
+    // If it's a known PG keyword or column name like "openTime", keep double quotes
+    if (p1 === 'openTime' || p1 === 'closeTime') return match;
+    return `'${p1}'`;
+  });
+
   let paramIndex = 1;
   let inString = false;
   let stringChar = '';
   let result = '';
-  for (let i = 0; i < sql.length; i++) {
-    const char = sql[i];
-    if ((char === "'" || char === '"') && (i === 0 || sql[i - 1] !== '\\')) {
+  for (let i = 0; i < normalizedSql.length; i++) {
+    const char = normalizedSql[i];
+    if ((char === "'" || char === '"') && (i === 0 || normalizedSql[i - 1] !== '\\')) {
       if (!inString) {
         inString = true;
         stringChar = char;
