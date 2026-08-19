@@ -173,7 +173,11 @@ export async function sendEmail(to: string, subject: string, html: string, text?
     logger.info(`Email sent via SMTP: ${info.messageId}`);
     return true;
   } catch (error: any) {
-    logger.error('Error sending email:', error);
+    if (error.responseCode === 535) {
+      logger.warn('SMTP Authentication failed (Invalid login). Falling back to mock email...');
+    } else {
+      logger.error('Error sending email:', error.message || error);
+    }
     
     if (overrideConfig) {
       throw error;

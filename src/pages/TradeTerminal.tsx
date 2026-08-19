@@ -5580,7 +5580,7 @@ const PROMOTED_ARTICLES = [
 
     const socket = io({
       path: '/socket.io',
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 2000,

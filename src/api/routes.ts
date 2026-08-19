@@ -1350,9 +1350,17 @@ router.post('/user/sync', async (req, res) => {
     }
 
     // 2. If not found in local, perform authoritative sync (Wait for Firestore)
-    const user = await authoritativeSync(uid);
+    let user = await authoritativeSync(uid);
     if (!user) {
-      return res.status(404).json({ error: 'User not found in Firestore' });
+      // If user doesn't exist in Firestore, create them locally
+      const email = req.body.email || '';
+      const displayName = req.body.displayName || '';
+      await run(
+        `INSERT INTO users (uid, email, display_name, real_balance, demo_balance, kyc_status, is_verified) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [uid, email, displayName, 0, 10000, 'unverified', 0]
+      );
+      user = await get('SELECT * FROM users WHERE uid = ?', [uid]);
     }
 
     const mappedData = mapUserForFrontend(user);
