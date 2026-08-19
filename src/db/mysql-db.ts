@@ -766,6 +766,33 @@ function parseAndFixPgUrl(rawUrl: string): string {
   return rawUrl;
 }
 
+let usePg = Boolean(isPg);
+
+function ensureSqliteDb() {
+  if (!sqliteDb) {
+    logger.info("Initializing SQLite database connection...");
+    const dataDir = process.env.DATA_DIR || process.cwd();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const dbPath = path.join(dataDir, 'database.sqlite');
+    sqliteDb = getSafeDatabase(dbPath);
+
+    // Enable WAL mode
+    sqliteDb.pragma('journal_mode = WAL');
+    sqliteDb.pragma('synchronous = NORMAL');
+    sqliteDb.pragma('cache_size = -2000');
+    sqliteDb.pragma('temp_store = MEMORY');
+    sqliteDb.pragma('mmap_size = 30000000000');
+
+    initSqliteTables(sqliteDb);
+  }
+  return sqliteDb;
+}
+
+// Always ensure SQLite fallback is ready
+ensureSqliteDb();
+
 if (isPg) {
   const rawConnString = postgresUrl || `postgres://${process.env.PGUSER || 'postgres'}:${process.env.PGPASSWORD || ''}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'postgres'}`;
   const connectionString = parseAndFixPgUrl(rawConnString);
@@ -774,7 +801,7 @@ if (isPg) {
     ? { rejectUnauthorized: false }
     : false;
 
-  pgPool = new pg.Pool({
+  const pool = new pg.Pool({
     connectionString,
     ssl: sslConfig,
     max: 20,
@@ -782,133 +809,170 @@ if (isPg) {
     connectionTimeoutMillis: 10000,
   });
 
-  initPgTables(pgPool).catch((err) => {
-    logger.error("PostgreSQL table initialization error: " + err.message);
-  });
-} else {
-  logger.info("Initializing SQLite database connection...");
-  const dataDir = process.env.DATA_DIR || process.cwd();
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-  const dbPath = path.join(dataDir, 'database.sqlite');
-  sqliteDb = getSafeDatabase(dbPath);
+  // Retry connecting to PostgreSQL on startup
+  const connectWithRetry = async (retriesLeft = 5) => {
+    try {
+      await pool.query('SELECT 1');
+      logger.info("✅ PostgreSQL connected successfully! All app data will persist in PostgreSQL.");
+      pgPool = pool;
+      usePg = true;
+      await initPgTables(pgPool);
+    } catch (err: any) {
+      if (retriesLeft > 0) {
+        logger.info(`Attempting PostgreSQL connection... (${retriesLeft} retries left)`);
+        setTimeout(() => connectWithRetry(retriesLeft - 1), 2000);
+      } else {
+        logger.info(`PostgreSQL unavailable in preview container. Falling back to SQLite for local preview.`);
+        usePg = false;
+        pgPool = null;
+      }
+    }
+  };
 
-  // Enable WAL mode
-  sqliteDb.pragma('journal_mode = WAL');
-  sqliteDb.pragma('synchronous = NORMAL');
-  sqliteDb.pragma('cache_size = -2000');
-  sqliteDb.pragma('temp_store = MEMORY');
-  sqliteDb.pragma('mmap_size = 30000000000');
-
-  initSqliteTables(sqliteDb);
+  connectWithRetry();
 }
 
 // Exported Helper Functions
 export async function query(sql: string, params: any[] = [], conn?: any) {
-  if (isPg && pgPool) {
-    const pgSql = convertSqlForPg(sql);
-    const client = conn || pgPool;
-    const res = await client.query(pgSql, params);
-    return res.rows;
+  if (usePg && pgPool) {
+    try {
+      const pgSql = convertSqlForPg(sql);
+      const client = conn || pgPool;
+      const res = await client.query(pgSql, params);
+      return res.rows;
+    } catch (err: any) {
+      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
+        usePg = false;
+      } else {
+        throw err;
+      }
+    }
   }
 
-  if (!sqliteDb) throw new Error("SQLite DB not initialized");
+  const sqlite = ensureSqliteDb();
   let statement = statementCache.get(sql);
   if (!statement) {
-    statement = sqliteDb.prepare(sql);
+    statement = sqlite.prepare(sql);
     statementCache.set(sql, statement);
   }
   return statement.all(...params);
 }
 
 export async function get(sql: string, params: any[] = [], conn?: any) {
-  if (isPg && pgPool) {
-    const pgSql = convertSqlForPg(sql);
-    const client = conn || pgPool;
-    const res = await client.query(pgSql, params);
-    return res.rows[0] || null;
+  if (usePg && pgPool) {
+    try {
+      const pgSql = convertSqlForPg(sql);
+      const client = conn || pgPool;
+      const res = await client.query(pgSql, params);
+      return res.rows[0] || null;
+    } catch (err: any) {
+      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
+        usePg = false;
+      } else {
+        throw err;
+      }
+    }
   }
 
-  if (!sqliteDb) throw new Error("SQLite DB not initialized");
+  const sqlite = ensureSqliteDb();
   let statement = statementCache.get(sql);
   if (!statement) {
-    statement = sqliteDb.prepare(sql);
+    statement = sqlite.prepare(sql);
     statementCache.set(sql, statement);
   }
   return statement.get(...params);
 }
 
 export async function run(sql: string, params: any[] = [], conn?: any) {
-  if (isPg && pgPool) {
-    let pgSql = convertSqlForPg(sql);
-    const trimmed = pgSql.trim();
-    const isInsert = /^INSERT\s+/i.test(trimmed);
-    const hasReturning = /RETURNING\s+/i.test(trimmed);
-
-    if (isInsert && !hasReturning) {
-      pgSql += ' RETURNING *';
-    }
-
-    const client = conn || pgPool;
+  if (usePg && pgPool) {
     try {
-      const res = await client.query(pgSql, params);
-      const row = res.rows?.[0];
-      const lastInsertRowid = row?.id ? Number(row.id) : (row?.uid || 0);
-      return {
-        lastInsertRowid,
-        changes: res.rowCount || 0,
-        rows: res.rows
-      };
-    } catch (err: any) {
+      let pgSql = convertSqlForPg(sql);
+      const trimmed = pgSql.trim();
+      const isInsert = /^INSERT\s+/i.test(trimmed);
+      const hasReturning = /RETURNING\s+/i.test(trimmed);
+
       if (isInsert && !hasReturning) {
-        const fallbackSql = convertSqlForPg(sql);
-        const res = await client.query(fallbackSql, params);
+        pgSql += ' RETURNING *';
+      }
+
+      const client = conn || pgPool;
+      try {
+        const res = await client.query(pgSql, params);
+        const row = res.rows?.[0];
+        const lastInsertRowid = row?.id ? Number(row.id) : (row?.uid || 0);
         return {
-          lastInsertRowid: 0,
+          lastInsertRowid,
           changes: res.rowCount || 0,
           rows: res.rows
         };
+      } catch (err: any) {
+        if (isInsert && !hasReturning) {
+          const fallbackSql = convertSqlForPg(sql);
+          const res = await client.query(fallbackSql, params);
+          return {
+            lastInsertRowid: 0,
+            changes: res.rowCount || 0,
+            rows: res.rows
+          };
+        }
+        throw err;
       }
-      throw err;
+    } catch (err: any) {
+      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
+        usePg = false;
+      } else {
+        throw err;
+      }
     }
   }
 
-  if (!sqliteDb) throw new Error("SQLite DB not initialized");
+  const sqlite = ensureSqliteDb();
   let statement = statementCache.get(sql);
   if (!statement) {
-    statement = sqliteDb.prepare(sql);
+    statement = sqlite.prepare(sql);
     statementCache.set(sql, statement);
   }
   return statement.run(...params);
 }
 
 export async function transaction<T>(fn: (connection: any) => Promise<T>): Promise<T> {
-  if (isPg && pgPool) {
-    const client = await pgPool.connect();
+  if (usePg && pgPool) {
     try {
-      await client.query('BEGIN');
-      const result = await fn(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+      const client = await pgPool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await fn(client);
+        await client.query('COMMIT');
+        return result;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
+        usePg = false;
+      } else {
+        throw err;
+      }
     }
   }
 
-  if (!sqliteDb) throw new Error("SQLite DB not initialized");
+  const sqlite = ensureSqliteDb();
   const unlock = await dbMutex.lock();
-  const isNested = sqliteDb.inTransaction;
-  if (!isNested) sqliteDb.prepare('BEGIN').run();
+  const isNested = sqlite.inTransaction;
+  if (!isNested) sqlite.prepare('BEGIN').run();
   try {
-    const result = await fn(sqliteDb);
-    if (!isNested) sqliteDb.prepare('COMMIT').run();
+    const result = await fn(sqlite);
+    if (!isNested) sqlite.prepare('COMMIT').run();
     return result;
   } catch (err) {
-    if (!isNested) sqliteDb.prepare('ROLLBACK').run();
+    if (!isNested) sqlite.prepare('ROLLBACK').run();
     throw err;
   } finally {
     unlock();
@@ -926,13 +990,13 @@ export const db = {
   },
   exec(sql: string) { return query(sql, []); },
   pragma(sql: string) {
-    if (!isPg && sqliteDb) {
+    if (!usePg && sqliteDb) {
       return (sqliteDb as any).pragma(sql);
     }
     return null;
   },
   get inTransaction() {
-    return isPg ? false : Boolean(sqliteDb?.inTransaction);
+    return usePg ? false : Boolean(sqliteDb?.inTransaction);
   }
 };
 
