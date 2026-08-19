@@ -2017,7 +2017,7 @@ export default function AdminDashboard() {
                            <button 
                              onClick={async () => {
                                  if (!window.confirm(`Add default tournaments?`)) return;
-                                 const { collection, addDoc } = await import('../firebase');
+                                 const { collection, addDoc } = await import('../firebase.ts');
                                  const defaults = [
                                      { title: 'Galaxy', status: 'Active', endTime: '23d 02h 45m', description: 'Explore the Galaxy tournament with massive prizes.', participationFee: '5,376.00', prizePool: '5,378,018.00', imageUrl: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&q=80&w=600', entryFee: '5,376.00' },
                                      { title: 'Market Makers', status: 'Active', endTime: '02d 02h 45m', description: 'Show your market making skills.', participationFee: '5,376.00', prizePool: '3,016,462.00', imageUrl: 'https://images.unsplash.com/photo-1611974714851-48206138d73e?auto=format&fit=crop&q=80&w=600', entryFee: '5,376.00' }
@@ -2599,12 +2599,12 @@ export default function AdminDashboard() {
                                         const newStatus = appConfig.binancePayEnabled === false ? true : false;
                                         setAppConfig({ ...appConfig, binancePayEnabled: newStatus });
                                         // Update in Firestore
-                                        const { doc, updateDoc } = await import('../firebase');
+                                        const { doc, updateDoc } = await import('../firebase.ts');
                                         await setDoc(doc(db, 'app_config', 'settings'), { binancePayEnabled: newStatus }, { merge: true });
                                         
                                         // Also find and update the Binance Pay document in depositMethods collection so they stay in sync
                                         try {
-                                            const { getDocs, query, collection, where } = await import('../firebase');
+                                            const { getDocs, query, collection, where } = await import('../firebase.ts');
                                             const snap = await getDocs(query(collection(db, 'depositMethods'), where('name', '==', 'Binance Pay')));
                                             if (!snap.empty) {
                                                 await updateDoc(doc(db, 'depositMethods', snap.docs[0].id), { isActive: newStatus });
@@ -2661,12 +2661,12 @@ export default function AdminDashboard() {
                                             const newStatus = appConfig.usdtTrc20Enabled === false ? true : false;
                                             setAppConfig({ ...appConfig, usdtTrc20Enabled: newStatus });
                                             // Update in Firestore
-                                            const { doc, updateDoc } = await import('../firebase');
+                                            const { doc, updateDoc } = await import('../firebase.ts');
                                             await setDoc(doc(db, 'app_config', 'settings'), { usdtTrc20Enabled: newStatus }, { merge: true });
                                             
                                             // Also find and update the USDT TRC-20 document in depositMethods collection so they stay in sync
                                             try {
-                                                const { getDocs, query, collection, where } = await import('../firebase');
+                                                const { getDocs, query, collection, where } = await import('../firebase.ts');
                                                 const snap = await getDocs(query(collection(db, 'depositMethods'), where('name', '==', 'USDT (TRC-20)')));
                                                 const dDoc = snap.docs.find(d => d.data().name === "USDT (TRC-20)");
                                                 if (dDoc) {
@@ -2725,12 +2725,12 @@ export default function AdminDashboard() {
                                             const newStatus = appConfig.ethEnabled === false ? true : false;
                                             setAppConfig({ ...appConfig, ethEnabled: newStatus });
                                             // Update in Firestore
-                                            const { doc, updateDoc } = await import('../firebase');
+                                            const { doc, updateDoc } = await import('../firebase.ts');
                                             await setDoc(doc(db, 'app_config', 'settings'), { ethEnabled: newStatus }, { merge: true });
                                             
                                             // Also find and update the Ethereum (ETH) document in depositMethods collection so they stay in sync
                                             try {
-                                                const { getDocs, query, collection, where } = await import('../firebase');
+                                                const { getDocs, query, collection, where } = await import('../firebase.ts');
                                                 const snap = await getDocs(query(collection(db, 'depositMethods'), where('name', '==', 'Ethereum (ETH)')));
                                                 const eDoc = snap.docs.find(d => d.data().name === "Ethereum (ETH)");
                                                 if (eDoc) {
@@ -3061,7 +3061,7 @@ export default function AdminDashboard() {
 
                                    // Sync changes directly with depositMethods collection
                                    try {
-                                       const { getDocs, query, collection, where, updateDoc } = await import('../firebase');
+                                       const { getDocs, query, collection, where, updateDoc } = await import('../firebase.ts');
                                        
                                        // Sync Binance Pay status
                                        const binanceSnap = await getDocs(query(collection(db, 'depositMethods'), where('name', '==', 'Binance Pay')));

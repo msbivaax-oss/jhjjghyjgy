@@ -816,84 +816,103 @@ if (isPg) {
     connectionTimeoutMillis: 10000,
   });
 
+  pgPool = pool;
+
   // Retry connecting to PostgreSQL on startup
   const connectWithRetry = async (retriesLeft = 5) => {
     try {
       await pool.query('SELECT 1');
       logger.info("✅ PostgreSQL connected successfully! All app data will persist in PostgreSQL.");
-      pgPool = pool;
-      usePg = true;
-      await initPgTables(pgPool);
+      await initPgTables(pool);
     } catch (err: any) {
       if (retriesLeft > 0) {
         logger.info(`Attempting PostgreSQL connection... (${retriesLeft} retries left)`);
         setTimeout(() => connectWithRetry(retriesLeft - 1), 2000);
       } else {
-        logger.info(`PostgreSQL unavailable in preview container. Falling back to SQLite for local preview.`);
-        usePg = false;
-        pgPool = null;
+        logger.warn("PostgreSQL connection issue: " + err.message + ". Operating with SQLite fallback.");
       }
     }
   };
 
-  connectWithRetry();
+  connectWithRetry().catch((err: any) => {
+    logger.warn("PostgreSQL retry task caught error: " + err?.message);
+  });
+}
+
+function isPgNetworkError(err: any): boolean {
+  if (!err) return false;
+  const code = err.code || '';
+  const msg = err.message || '';
+  return (
+    code === 'EAI_AGAIN' ||
+    code === 'ENOTFOUND' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === '57P01' ||
+    code === '28P01' ||
+    msg.includes('getaddrinfo') ||
+    msg.includes('connect ECONNREFUSED') ||
+    msg.includes('Connection terminated') ||
+    msg.includes('timeout')
+  );
 }
 
 // Exported Helper Functions
 export async function query(sql: string, params: any[] = [], conn?: any) {
-  if (usePg && pgPool) {
+  const isPgClient = conn ? (typeof conn.query === 'function') : (usePg && !!pgPool);
+  if (isPgClient) {
     try {
       const pgSql = convertSqlForPg(sql);
       const client = conn || pgPool;
       const res = await client.query(pgSql, params);
       return res.rows;
     } catch (err: any) {
-      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
-        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
-        usePg = false;
+      if (isPgNetworkError(err)) {
+        logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
       }
     }
   }
 
-  const sqlite = ensureSqliteDb();
-  let statement = statementCache.get(sql);
+  const sqlite = (conn && typeof conn.prepare === 'function') ? conn : ensureSqliteDb();
+  let statement = (!conn) ? statementCache.get(sql) : undefined;
   if (!statement) {
     statement = sqlite.prepare(sql);
-    statementCache.set(sql, statement);
+    if (!conn) statementCache.set(sql, statement);
   }
   return statement.all(...params);
 }
 
 export async function get(sql: string, params: any[] = [], conn?: any) {
-  if (usePg && pgPool) {
+  const isPgClient = conn ? (typeof conn.query === 'function') : (usePg && !!pgPool);
+  if (isPgClient) {
     try {
       const pgSql = convertSqlForPg(sql);
       const client = conn || pgPool;
       const res = await client.query(pgSql, params);
       return res.rows[0] || null;
     } catch (err: any) {
-      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
-        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
-        usePg = false;
+      if (isPgNetworkError(err)) {
+        logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
       }
     }
   }
 
-  const sqlite = ensureSqliteDb();
-  let statement = statementCache.get(sql);
+  const sqlite = (conn && typeof conn.prepare === 'function') ? conn : ensureSqliteDb();
+  let statement = (!conn) ? statementCache.get(sql) : undefined;
   if (!statement) {
     statement = sqlite.prepare(sql);
-    statementCache.set(sql, statement);
+    if (!conn) statementCache.set(sql, statement);
   }
   return statement.get(...params);
 }
 
 export async function run(sql: string, params: any[] = [], conn?: any) {
-  if (usePg && pgPool) {
+  const isPgClient = conn ? (typeof conn.query === 'function') : (usePg && !!pgPool);
+  if (isPgClient) {
     try {
       let pgSql = convertSqlForPg(sql);
       const trimmed = pgSql.trim();
@@ -916,31 +935,41 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
         };
       } catch (err: any) {
         if (isInsert && !hasReturning) {
-          const fallbackSql = convertSqlForPg(sql);
-          const res = await client.query(fallbackSql, params);
-          return {
-            lastInsertRowid: 0,
-            changes: res.rowCount || 0,
-            rows: res.rows
-          };
+          try {
+            const fallbackSql = convertSqlForPg(sql);
+            const res = await client.query(fallbackSql, params);
+            return {
+              lastInsertRowid: 0,
+              changes: res.rowCount || 0,
+              rows: res.rows
+            };
+          } catch (innerErr: any) {
+            if (isPgNetworkError(innerErr)) {
+              logger.warn(`PostgreSQL network issue (${innerErr.message}). Falling back to SQLite.`);
+            } else {
+              throw innerErr;
+            }
+          }
+        } else if (isPgNetworkError(err)) {
+          logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
+        } else {
+          throw err;
         }
-        throw err;
       }
     } catch (err: any) {
-      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
-        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
-        usePg = false;
+      if (isPgNetworkError(err)) {
+        logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
       }
     }
   }
 
-  const sqlite = ensureSqliteDb();
-  let statement = statementCache.get(sql);
+  const sqlite = (conn && typeof conn.prepare === 'function') ? conn : ensureSqliteDb();
+  let statement = (!conn) ? statementCache.get(sql) : undefined;
   if (!statement) {
     statement = sqlite.prepare(sql);
-    statementCache.set(sql, statement);
+    if (!conn) statementCache.set(sql, statement);
   }
   return statement.run(...params);
 }
@@ -955,15 +984,18 @@ export async function transaction<T>(fn: (connection: any) => Promise<T>): Promi
         await client.query('COMMIT');
         return result;
       } catch (err) {
-        await client.query('ROLLBACK');
-        throw err;
+        try { await client.query('ROLLBACK'); } catch {}
+        if (isPgNetworkError(err)) {
+          logger.warn(`PostgreSQL network issue (${(err as any)?.message}). Falling back to SQLite.`);
+        } else {
+          throw err;
+        }
       } finally {
         client.release();
       }
     } catch (err: any) {
-      if (err.code === 'EAI_AGAIN' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
-        logger.info(`PostgreSQL unreachable (${err.message}). Falling back to SQLite.`);
-        usePg = false;
+      if (isPgNetworkError(err)) {
+        logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
       }

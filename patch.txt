@@ -1,0 +1,30 @@
+--- src/db/mysql-db.ts
++++ src/db/mysql-db.ts
+@@ -816,21 +816,19 @@
+     idleTimeoutMillis: 30000,
+     connectionTimeoutMillis: 10000,
+   });
++
++  pgPool = pool;
+ 
+   // Retry connecting to PostgreSQL on startup
+   const connectWithRetry = async (retriesLeft = 5) => {
+     try {
+       await pool.query('SELECT 1');
+       logger.info("✅ PostgreSQL connected successfully! All app data will persist in PostgreSQL.");
+-      pgPool = pool;
+-      usePg = true;
+-      await initPgTables(pgPool);
++      await initPgTables(pool);
+     } catch (err: any) {
+       if (retriesLeft > 0) {
+         logger.info(`Attempting PostgreSQL connection... (${retriesLeft} retries left)`);
+         setTimeout(() => connectWithRetry(retriesLeft - 1), 2000);
+       } else {
+-        logger.info(`PostgreSQL unavailable in preview container. Falling back to SQLite for local preview.`);
+-        logger.error("PostgreSQL connection issue: " + err.message);
+-        pgPool = null;
++        logger.error(`PostgreSQL unavailable in preview container. Connection issue: ` + err.message);
+       }
+     }
+   };

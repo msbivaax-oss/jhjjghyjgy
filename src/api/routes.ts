@@ -4156,6 +4156,8 @@ router.post('/alerts', async (req, res) => {
 // These are placed at the end to act as a fallback for the custom frontend firebase.ts
 
 const PUBLIC_COLLECTIONS = [
+  'education',
+  'stories',
   'pages', 
   'app_config', 
   'depositMethods', 
@@ -4185,7 +4187,12 @@ async function getAuthenticatedUser(req: any): Promise<{ uid: string; email: str
       }
     }
     if (decoded) {
-      const dbUser = await get('SELECT is_admin, email FROM users WHERE uid = ? OR email = ?', [decoded.uid, decoded.email]) as any;
+      let dbUser: any = null;
+      try {
+        dbUser = await get('SELECT is_admin, email FROM users WHERE uid = ? OR email = ?', [decoded.uid, decoded.email]) as any;
+      } catch (dbErr: any) {
+        logger.warn(`Failed to fetch dbUser in getAuthenticatedUser, falling back to token claims: ${dbErr?.message || dbErr}`);
+      }
       const userEmail = (dbUser?.email || decoded.email)?.toLowerCase().trim();
       const hardcodedAdminEmails = [
         'bivaaxtrader@gmail.com',
@@ -4320,10 +4327,10 @@ router.patch('/:collection/:id', async (req, res) => {
     } else {
       if (!user) return res.status(401).json({ error: 'Unauthorized: No token provided' });
       const doc = await adminDb.collection(collection).doc(id).get();
-      if (!doc.exists) return res.status(404).json({ error: 'Not found' });
+      const data = doc.exists ? doc.data() : null;
       
-      const data = doc.data();
       if (!user.isAdmin) {
+        if (!doc.exists) return res.status(404).json({ error: 'Not found' });
         if (collection === 'users') {
           if (id !== user.uid) return res.status(403).json({ error: 'Forbidden: Access denied' });
           // Prevent role/admin/balance self-modifications

@@ -2027,7 +2027,7 @@ export default function TradeTerminal() {
       setTournamentBalance(prev => {
         const newVal = Math.max(0, parseFloat(new Big(prev).plus(bigDelta).toFixed(2)));
         if (auth.currentUser && activeTournamentId) {
-          import('../firebase').then(({ doc, updateDoc }) => {
+          import('../firebase.ts').then(({ doc, updateDoc }) => {
             updateDoc(doc(db, 'tournaments', activeTournamentId, 'participants', auth.currentUser!.uid), {
               score: newVal,
               updatedAt: Date.now()
@@ -2576,7 +2576,7 @@ const PROMOTED_ARTICLES = [
                }
                // Persist automatically to Firestore users document if missing
                if (currentUser) {
-                   const { doc, getDoc, updateDoc } = await import('../firebase');
+                   const { doc, getDoc, updateDoc } = await import('../firebase.ts');
                    const userRef = doc(db, "users", currentUser.uid);
                    const snap = await getDoc(userRef).catch(() => null);
                    if (snap && snap.exists()) {
@@ -5473,7 +5473,7 @@ const PROMOTED_ARTICLES = [
 
       if (auth?.currentUser) {
         try {
-          const { doc, updateDoc } = await import("../firebase");
+          const { doc, updateDoc } = await import("../firebase.ts");
           await updateDoc(doc(db, "users", auth.currentUser.uid), {
             phone: verifiedNumber,
             phoneNumber: verifiedNumber,
@@ -12572,7 +12572,7 @@ const PROMOTED_ARTICLES = [
                           return;
                         }
                         try {
-                          import('../firebase').then(async ({ doc, updateDoc, increment }) => {
+                          import('../firebase.ts').then(async ({ doc, updateDoc, increment }) => {
                             const userDocRef = doc(db, 'users', auth.currentUser!.uid);
                             const participantDocRef = doc(db, 'tournaments', activeTournamentId, 'participants', auth.currentUser!.uid);
                             
@@ -13293,7 +13293,7 @@ const PROMOTED_ARTICLES = [
                                            setTxHash("0x" + Math.random().toString(16).slice(2, 42) + Math.random().toString(16).slice(2, 24));
                                            setWeb3State('success');
                                            
-                                           import('../firebase').then(async ({ doc, updateDoc, increment }) => {
+                                           import('../firebase.ts').then(async ({ doc, updateDoc, increment }) => {
                                               if (auth?.currentUser) {
                                                   const baseDeposit = convertToBase(Number(depositAmount), userCurrency);
                                                   await updateDoc(doc(db, 'users', auth.currentUser.uid), {
@@ -13415,7 +13415,7 @@ const PROMOTED_ARTICLES = [
                                   
                                   if (auth?.currentUser) {
                                     try {
-                                      const { collection, addDoc, serverTimestamp } = await import('../firebase');
+                                      const { collection, addDoc, serverTimestamp } = await import('../firebase.ts');
                                       const currentAmount = convertToBase(Number(depositAmount), userCurrency);
                                       
                                       const depositPayload = {
@@ -14420,7 +14420,7 @@ const PROMOTED_ARTICLES = [
                         onClick={async () => {
                            if (auth.currentUser) {
                                try {
-                                   const { doc, deleteDoc } = await import('../firebase');
+                                   const { doc, deleteDoc } = await import('../firebase.ts');
                                    await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'priceAlerts', a.id));
                                } catch (e) { console.error(e); }
                            }
