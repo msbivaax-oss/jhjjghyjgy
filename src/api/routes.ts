@@ -814,23 +814,12 @@ export async function getUserTransactions(userId: string): Promise<any[]> {
 export async function syncGlobalTransactionsFromFirestore() {
   if (!adminDb) return;
   try {
-    const checkHashStmt = db.prepare('SELECT id FROM transactions WHERE user_id = ? AND tx_hash = ? AND type = ?');
-    const checkPatternStmt = db.prepare('SELECT id FROM transactions WHERE user_id = ? AND details LIKE ? AND type = ?');
-    const checkExactStmt = db.prepare('SELECT id FROM transactions WHERE user_id = ? AND type = ? AND amount = ? AND created_at = ?');
-    const insertStmt = db.prepare(`
-      INSERT INTO transactions (user_id, type, amount, status, method, tx_hash, currency, details, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const updateStmt = db.prepare(`
-      UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status != ?
-    `);
-
     // 1. Sync Deposits
     const depositsSnap = await adminDb.collection('deposits').limit(500).get();
     let i = 0;
     const batchSize = 50;
     while (i < depositsSnap.docs.length) {
-      await transaction(async () => {
+      await transaction(async (conn) => {
         const batch = depositsSnap.docs.slice(i, i + batchSize);
         for (const doc of batch) {
           const data = doc.data();
@@ -847,21 +836,30 @@ export async function syncGlobalTransactionsFromFirestore() {
 
           let existingTx = null;
           if (txHash) {
-            existingTx = checkHashStmt.get(userId, txHash, 'deposit');
+            existingTx = await get('SELECT id FROM transactions WHERE user_id = ? AND tx_hash = ? AND type = ?', [userId, txHash, 'deposit'], conn);
           }
           if (!existingTx) {
-            existingTx = checkPatternStmt.get(userId, `%${firestoreId}%`, 'deposit');
+            existingTx = await get('SELECT id FROM transactions WHERE user_id = ? AND details LIKE ? AND type = ?', [userId, `%${firestoreId}%`, 'deposit'], conn);
           }
           if (!existingTx) {
-            existingTx = checkExactStmt.get(userId, 'deposit', amount, createdTime);
+            existingTx = await get('SELECT id FROM transactions WHERE user_id = ? AND type = ? AND amount = ? AND created_at = ?', [userId, 'deposit', amount, createdTime], conn);
           }
 
           const detailsObj = { firestoreId, walletNumber: data.walletNumber, orderId: data.orderId };
 
           if (!existingTx) {
-            insertStmt.run(userId, 'deposit', amount, status, method, txHash, currency, JSON.stringify(detailsObj), createdTime);
+            await run(
+              `INSERT INTO transactions (user_id, type, amount, status, method, tx_hash, currency, details, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [userId, 'deposit', amount, status, method, txHash, currency, JSON.stringify(detailsObj), createdTime],
+              conn
+            );
           } else {
-            updateStmt.run(status, Date.now(), (existingTx as any).id, status);
+            await run(
+              `UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status != ?`,
+              [status, Date.now(), (existingTx as any).id, status],
+              conn
+            );
           }
         }
       }).catch(txErr => {
@@ -875,7 +873,7 @@ export async function syncGlobalTransactionsFromFirestore() {
     const withdrawalsSnap = await adminDb.collection('withdrawals').limit(500).get();
     i = 0;
     while (i < withdrawalsSnap.docs.length) {
-      await transaction(async () => {
+      await transaction(async (conn) => {
         const batch = withdrawalsSnap.docs.slice(i, i + batchSize);
         for (const doc of batch) {
           const data = doc.data();
@@ -892,21 +890,30 @@ export async function syncGlobalTransactionsFromFirestore() {
 
           let existingTx = null;
           if (txHash) {
-            existingTx = checkHashStmt.get(userId, txHash, 'withdrawal');
+            existingTx = await get('SELECT id FROM transactions WHERE user_id = ? AND tx_hash = ? AND type = ?', [userId, txHash, 'withdrawal'], conn);
           }
           if (!existingTx) {
-            existingTx = checkPatternStmt.get(userId, `%${firestoreId}%`, 'withdrawal');
+            existingTx = await get('SELECT id FROM transactions WHERE user_id = ? AND details LIKE ? AND type = ?', [userId, `%${firestoreId}%`, 'withdrawal'], conn);
           }
           if (!existingTx) {
-            existingTx = checkExactStmt.get(userId, 'withdrawal', amount, createdTime);
+            existingTx = await get('SELECT id FROM transactions WHERE user_id = ? AND type = ? AND amount = ? AND created_at = ?', [userId, 'withdrawal', amount, createdTime], conn);
           }
 
           const detailsObj = { firestoreId, walletNumber: data.walletNumber, bankDetails: data.details };
 
           if (!existingTx) {
-            insertStmt.run(userId, 'withdrawal', amount, status, method, txHash, currency, JSON.stringify(detailsObj), createdTime);
+            await run(
+              `INSERT INTO transactions (user_id, type, amount, status, method, tx_hash, currency, details, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [userId, 'withdrawal', amount, status, method, txHash, currency, JSON.stringify(detailsObj), createdTime],
+              conn
+            );
           } else {
-            updateStmt.run(status, Date.now(), (existingTx as any).id, status);
+            await run(
+              `UPDATE transactions SET status = ?, updated_at = ? WHERE id = ? AND status != ?`,
+              [status, Date.now(), (existingTx as any).id, status],
+              conn
+            );
           }
         }
       }).catch(txErr => {
@@ -926,16 +933,10 @@ export async function syncKYCRequestsFromFirestore() {
     const snapshot = await adminDb.collection('kycRequests').limit(200).get();
     if (snapshot.empty) return;
 
-    const checkStmt = db.prepare('SELECT id FROM kyc_requests WHERE user_id = ? AND status = ? AND document_number = ?');
-    const insertStmt = db.prepare(`
-      INSERT INTO kyc_requests (user_id, status, full_name, document_type, document_number, front_image, back_image, selfie_image, rejection_reason, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     let i = 0;
     const batchSize = 50;
     while (i < snapshot.docs.length) {
-      await transaction(async () => {
+      await transaction(async (conn) => {
         const batch = snapshot.docs.slice(i, i + batchSize);
         for (const doc of batch) {
           const data = doc.data();
@@ -953,9 +954,14 @@ export async function syncKYCRequestsFromFirestore() {
           const submittedAt = data.submittedAt || Date.now();
           const updatedAt = data.updatedAt instanceof Date ? data.updatedAt.getTime() : (data.updatedAt || Date.now());
 
-          const existing = checkStmt.get(userId, status, documentNumber);
+          const existing = await get('SELECT id FROM kyc_requests WHERE user_id = ? AND status = ? AND document_number = ?', [userId, status, documentNumber], conn);
           if (!existing) {
-            insertStmt.run(userId, status, fullName, documentType, documentNumber, frontImage, backImage, selfieImage, rejectionReason, submittedAt, updatedAt);
+            await run(
+              `INSERT INTO kyc_requests (user_id, status, full_name, document_type, document_number, front_image, back_image, selfie_image, rejection_reason, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [userId, status, fullName, documentType, documentNumber, frontImage, backImage, selfieImage, rejectionReason, submittedAt, updatedAt],
+              conn
+            );
           }
         }
       }).catch(txErr => {
@@ -975,16 +981,7 @@ export async function syncTradesFromFirestore() {
     const snapshot = await adminDb.collection('trades').orderBy('createdAt', 'desc').limit(500).get();
     if (snapshot.empty) return;
 
-    const checkStmt = db.prepare('SELECT id FROM trades WHERE firebase_id = ?');
-    const insertStmt = db.prepare(`
-      INSERT INTO trades (firebase_id, user_id, market_id, amount, direction, entry_price, exit_price, duration, expiry_time, is_demo, status, payout_amount, settled_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const updateStmt = db.prepare(`
-      UPDATE trades SET status = ?, exit_price = ?, payout_amount = ?, settled_at = ? WHERE firebase_id = ? AND status != ?
-    `);
-
-    await transaction(async () => {
+    await transaction(async (conn) => {
       for (const doc of snapshot.docs) {
         const data = doc.data();
         const firebaseId = doc.id;
@@ -1003,11 +1000,20 @@ export async function syncTradesFromFirestore() {
         const settledAt = data.settledAt || null;
         const createdAt = data.createdAt || Date.now();
 
-        const existing = checkStmt.get(firebaseId);
+        const existing = await get('SELECT id FROM trades WHERE firebase_id = ?', [firebaseId], conn);
         if (!existing) {
-          insertStmt.run(firebaseId, userId, marketId, amount, direction, entryPrice, exitPrice, duration, expiryTime, isDemo, status, payoutAmount, settledAt, createdAt);
+          await run(
+            `INSERT INTO trades (firebase_id, user_id, market_id, amount, direction, entry_price, exit_price, duration, expiry_time, is_demo, status, payout_amount, settled_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [firebaseId, userId, marketId, amount, direction, entryPrice, exitPrice, duration, expiryTime, isDemo, status, payoutAmount, settledAt, createdAt],
+            conn
+          );
         } else {
-          updateStmt.run(status, exitPrice, payoutAmount, settledAt, firebaseId, status);
+          await run(
+            `UPDATE trades SET status = ?, exit_price = ?, payout_amount = ?, settled_at = ? WHERE firebase_id = ? AND status != ?`,
+            [status, exitPrice, payoutAmount, settledAt, firebaseId, status],
+            conn
+          );
         }
       }
     }).catch(txErr => {
@@ -1214,24 +1220,20 @@ export async function syncAllUsersFromFirestore() {
     const snapshot = await adminDb.collection('users').limit(1000).get();
     if (snapshot.empty) return;
 
-    const checkStmt = db.prepare('SELECT id, real_balance, demo_balance, is_verified, kyc_status, display_name, password_hash, affiliate_balance, total_affiliate_earnings, referral_count FROM users WHERE uid = ?');
-    const insertStmt = db.prepare(`
-      INSERT OR IGNORE INTO users (uid, email, password_hash, display_name, nickname, photo_url, real_balance, demo_balance, currency, is_verified, is_admin, kyc_status, referral_code, referred_by_uid, total_live_volume, country, country_code, affiliate_balance, total_affiliate_earnings, referral_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     let i = 0;
     const batchSize = 50;
     while (i < snapshot.docs.length) {
-      await transaction(async () => {
+      await transaction(async (conn) => {
         const batch = snapshot.docs.slice(i, i + batchSize);
         for (const doc of batch) {
           const fbData = doc.data();
           const uid = doc.id;
           const email = fbData.email || '';
           
-          const realBalance = fbData.balance || fbData.real_balance || fbData.realBalance || '0.00';
-          const demoBalance = fbData.demoBalance || fbData.demo_balance || '10000.00';
+          const rawReal = fbData.balance ?? fbData.real_balance ?? fbData.realBalance ?? 0;
+          const realBalance = parseFloat(rawReal.toString()) || 0;
+          const rawDemo = fbData.demoBalance ?? fbData.demo_balance ?? 10000;
+          const demoBalance = parseFloat(rawDemo.toString()) || 10000;
           const isVerified = (fbData.isVerified || fbData.is_verified || fbData.emailVerified) ? 1 : 0;
           const kycStatus = fbData.kycStatus || fbData.kyc_status || 'unverified';
           const passwordValue = fbData.password_hash || fbData.passwordHash || fbData.password || null;
@@ -1249,14 +1251,19 @@ export async function syncAllUsersFromFirestore() {
           const affiliateBalance = fbData.affiliateBalance || fbData.affiliate_balance || '0.00';
           const totalAffiliateEarnings = fbData.totalAffiliateEarnings || fbData.total_affiliate_earnings || '0.00';
 
-          const user = checkStmt.get(uid) as any;
+          const user = await get('SELECT id, real_balance, demo_balance, is_verified, kyc_status, display_name, password_hash, affiliate_balance, total_affiliate_earnings, referral_count FROM users WHERE uid = ?', [uid], conn) as any;
 
           if (!user) {
-            insertStmt.run(
-              uid, email, passwordValue, displayName, nickname, photoURL, 
-              realBalance.toString(), demoBalance.toString(), currency, isVerified, is_admin, kycStatus, 
-              referralCode, referredByUid, totalLiveVolume.toString(), country, countryCode,
-              affiliateBalance.toString(), totalAffiliateEarnings.toString(), referralCount
+            await run(
+              `INSERT INTO users (uid, email, password_hash, display_name, nickname, photo_url, real_balance, demo_balance, currency, is_verified, is_admin, kyc_status, referral_code, referred_by_uid, total_live_volume, country, country_code, affiliate_balance, total_affiliate_earnings, referral_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                uid, email, passwordValue, displayName, nickname, photoURL, 
+                realBalance, demoBalance, currency, isVerified, is_admin, kycStatus, 
+                referralCode, referredByUid, totalLiveVolume.toString(), country, countryCode,
+                affiliateBalance.toString(), totalAffiliateEarnings.toString(), referralCount
+              ],
+              conn
             );
           } else {
             let needsUpdate = false;
@@ -1264,14 +1271,14 @@ export async function syncAllUsersFromFirestore() {
             const params: any[] = [];
 
             // Only update balance from Firestore if SQL balance is 0/null and Firestore has a positive balance
-            if ((parseFloat(user.real_balance || 0) === 0) && parseFloat(realBalance || 0) > 0) {
+            if ((parseFloat(user.real_balance || 0) === 0) && realBalance > 0) {
               updates.push('real_balance = ?');
-              params.push(realBalance.toString());
+              params.push(realBalance);
               needsUpdate = true;
             }
-            if ((parseFloat(user.demo_balance || 0) === 0) && parseFloat(demoBalance || 0) > 0) {
+            if ((parseFloat(user.demo_balance || 0) === 0) && demoBalance > 0) {
               updates.push('demo_balance = ?');
-              params.push(demoBalance.toString());
+              params.push(demoBalance);
               needsUpdate = true;
             }
             if ((parseFloat(user.affiliate_balance || 0) === 0) && parseFloat(affiliateBalance || 0) > 0) {
@@ -1312,7 +1319,7 @@ export async function syncAllUsersFromFirestore() {
 
             if (needsUpdate) {
               params.push(uid);
-              db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE uid = ?`).run(...params);
+              await run(`UPDATE users SET ${updates.join(', ')} WHERE uid = ?`, params, conn);
             }
           }
         }
@@ -2854,7 +2861,7 @@ router.post('/admin/deposits/update', requireAuth, async (req: AuthRequest, res)
 
     if (sqlTx) {
       const newStatus = isSuccessOrApproved ? 'completed' : status === 'rejected' ? 'rejected' : status;
-      await run('UPDATE transactions SET status = ?, updated_at = datetime(\'now\') WHERE id = ?', [newStatus, sqlTx.id]);
+      await run('UPDATE transactions SET status = ?, updated_at = ? WHERE id = ?', [newStatus, Date.now(), sqlTx.id]);
     } else if (isSuccessOrApproved) {
       // Insert the transaction into SQLite if it wasn't pre-synced
       const detailsObj = { firestoreId: id, walletNumber: depositData?.walletNumber || '', orderId: depositData?.orderId || orderId || '' };
@@ -3077,7 +3084,7 @@ router.post('/admin/withdrawals/update', requireAuth, async (req: AuthRequest, r
       }
       if (tx) {
         const newSqlStatus = status === 'success' ? 'completed' : status === 'rejected' ? 'rejected' : status === 'approved' ? 'approved' : status;
-        await run('UPDATE transactions SET status = ?, updated_at = datetime("now") WHERE id = ?', [newSqlStatus, tx.id]);
+        await run('UPDATE transactions SET status = ?, updated_at = ? WHERE id = ?', [newSqlStatus, Date.now(), tx.id]);
       }
     } catch (sqlTxErr) {
       logger.error('Error updating SQL transaction for withdrawal:', sqlTxErr);
@@ -3354,7 +3361,7 @@ router.post('/admin/transactions/approve', requireAuth, async (req: AuthRequest,
         }
       }
 
-      await run('UPDATE transactions SET status = ?, updated_at = datetime(\'now\') WHERE id = ?', ['completed', id], conn);
+      await run('UPDATE transactions SET status = ?, updated_at = ? WHERE id = ?', ['completed', Date.now(), id], conn);
 
       // Notify user of balance update
       const updatedUser = await get('SELECT * FROM users WHERE uid = ?', [tx.user_id], conn) as any;
@@ -3424,7 +3431,7 @@ router.post('/admin/transactions/reject', requireAuth, async (req: AuthRequest, 
         await run('UPDATE users SET real_balance = ? WHERE uid = ?', [newBalance, tx.user_id], conn);
       }
 
-      await run('UPDATE transactions SET status = ?, updated_at = datetime(\'now\'), rejection_reason = ? WHERE id = ?', ['rejected', reason || 'Documentation mismatch or invalid transaction', id], conn);
+      await run('UPDATE transactions SET status = ?, updated_at = ?, rejection_reason = ? WHERE id = ?', ['rejected', Date.now(), reason || 'Documentation mismatch or invalid transaction', id], conn);
 
       // Fetch user for notification
       const updatedUser = await get('SELECT * FROM users WHERE uid = ?', [tx.user_id], conn) as any;

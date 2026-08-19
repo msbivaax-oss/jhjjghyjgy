@@ -154,8 +154,9 @@ router.post('/login',
       let user = await get('SELECT * FROM users WHERE email = ?', [email]) as any;
       
       // OPTIMIZATION: If user exists in local DB, verify and login immediately
-      if (user && user.password) {
-          const isMatch = await comparePassword(password, user.password);
+      const dbPassword = user?.password || user?.password_hash;
+      if (user && dbPassword) {
+          const isMatch = await comparePassword(password, dbPassword);
           if (isMatch) {
               await logLogin(user.uid, req.ip, req.headers['user-agent'], 'success');
               const emailLower = user.email.toLowerCase().trim();
@@ -195,11 +196,12 @@ router.post('/login',
         }
       }
 
-      if (!user || !user.password) {
+      const finalDbPassword = user?.password || user?.password_hash;
+      if (!user || !finalDbPassword) {
         return res.status(400).json({ error: 'Invalid email or password' });
       }
 
-    const isMatch = await comparePassword(password, user.password);
+    const isMatch = await comparePassword(password, finalDbPassword);
     if (!isMatch) {
       await logLogin(user.uid, req.ip, req.headers['user-agent'], 'failed');
       return res.status(400).json({ error: 'Invalid email or password' });

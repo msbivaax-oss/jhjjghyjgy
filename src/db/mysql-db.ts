@@ -835,19 +835,21 @@ if (isPg) {
 
   pgPool = pool;
 
-  // Retry connecting to PostgreSQL on startup
-  const connectWithRetry = async (retriesLeft = 5) => {
+  // Retry connecting to PostgreSQL on startup indefinitely
+  let isConnected = false;
+  const connectWithRetry = async (attempt = 1) => {
+    if (isConnected) return;
     try {
       await pool.query('SELECT 1');
+      isConnected = true;
+      usePg = true;
       logger.info("✅ PostgreSQL connected successfully! All app data will persist in PostgreSQL.");
       await initPgTables(pool);
     } catch (err: any) {
-      if (retriesLeft > 0) {
-        logger.info(`Attempting PostgreSQL connection... (${retriesLeft} retries left)`);
-        setTimeout(() => connectWithRetry(retriesLeft - 1), 2000);
-      } else {
-        logger.warn("PostgreSQL connection issue: " + err.message + ". Operating with SQLite fallback.");
+      if (attempt <= 3 || attempt % 10 === 0) {
+        logger.info(`Connecting to PostgreSQL (attempt ${attempt})... ${err.message}`);
       }
+      setTimeout(() => connectWithRetry(attempt + 1), 3000);
     }
   };
 
