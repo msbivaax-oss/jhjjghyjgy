@@ -541,8 +541,10 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-router.post('/api/kyc', async (req, res) => {
-  const { userId, kycData } = req.body;
+router.post('/api/kyc', requireAuth, async (req: AuthRequest, res) => {
+  let { userId, kycData } = req.body;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId || !kycData) return res.status(400).json({ error: 'Missing KYC data' });
 
   try {
@@ -674,8 +676,10 @@ router.post('/api/kyc', async (req, res) => {
 
 // --- Admin & Support Routes ---
 
-router.get('/user/details', async (req, res) => {
-  const { uid } = req.query;
+router.get('/user/details', requireAuth, async (req: AuthRequest, res) => {
+  let uid = req.query.uid as string;
+  if (!req.user?.isAdmin) uid = req.user!.uid;
+  if (!uid) uid = req.user!.uid;
   if (!uid) return res.status(400).json({ error: 'UID is required' });
 
   try {
@@ -1306,8 +1310,10 @@ export async function syncAllUsersFromFirestore() {
 }
 
 // 1. User Sync (called on app load / terminal boot)
-router.post('/user/sync', async (req, res) => {
-  const { uid } = req.body;
+router.post('/user/sync', requireAuth, async (req: AuthRequest, res) => {
+  let uid = req.body.uid;
+  if (!req.user?.isAdmin) uid = req.user!.uid;
+  if (!uid) uid = req.user!.uid;
   if (!uid) {
     logger.error('Sync failed: uid is missing');
     return res.status(400).json({ error: 'uid is required' });
@@ -1354,8 +1360,10 @@ router.post('/user/sync', async (req, res) => {
 });
 
 // 2. Check 2FA Configuration
-router.get('/user/check-2fa', async (req, res) => {
-  const { uid } = req.query;
+router.get('/user/check-2fa', requireAuth, async (req: AuthRequest, res) => {
+  let uid = req.query.uid as string;
+  if (!req.user?.isAdmin) uid = req.user!.uid;
+  if (!uid) uid = req.user!.uid;
   if (!uid) return res.status(400).json({ error: 'uid is required' });
 
   try {
@@ -1488,8 +1496,10 @@ router.patch('/users/:id', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // 4. Fetch User Trades
-router.get('/user-trades', async (req, res) => {
-  const { userId } = req.query;
+router.get('/user-trades', requireAuth, async (req: AuthRequest, res) => {
+  let userId = req.query.userId as string;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   
   try {
@@ -1504,8 +1514,10 @@ router.get('/user-trades', async (req, res) => {
 });
 
 // 5. Fetch User Tickets
-router.get('/user-tickets', async (req, res) => {
-  const { userId } = req.query;
+router.get('/user-tickets', requireAuth, async (req: AuthRequest, res) => {
+  let userId = req.query.userId as string;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
 
   try {
@@ -1626,9 +1638,10 @@ router.get('/affiliate_postbacks', async (req, res) => {
 });
 
 // Support Tickets List
-router.get('/tickets', async (req, res) => {
-    try {
-        const { status, category, search, assignedAgentId, userId } = req.query as any;
+router.get('/tickets', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    let { status, category, search, assignedAgentId, userId } = req.query as any;
+    if (!req.user?.isAdmin) userId = req.user!.uid;
         let sql = 'SELECT * FROM tickets WHERE 1=1';
         const params: any[] = [];
 
@@ -1663,9 +1676,10 @@ router.get('/tickets', async (req, res) => {
     }
 });
 
-router.get('/support/tickets', async (req, res) => {
-    try {
-        const { status, category, search, assignedAgentId, userId } = req.query as any;
+router.get('/support/tickets', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    let { status, category, search, assignedAgentId, userId } = req.query as any;
+    if (!req.user?.isAdmin) userId = req.user!.uid;
         let sql = 'SELECT * FROM tickets WHERE 1=1';
         const params: any[] = [];
 
@@ -1999,7 +2013,7 @@ router.post('/support/reply', async (req, res) => {
 });
 
 // User 360° Support Context Endpoint for Agents
-router.get('/support/user-context/:userId', async (req, res) => {
+router.get('/support/user-context/:userId', requireAdmin, async (req: AuthRequest, res) => {
   const { userId } = req.params;
 
   try {
@@ -2141,8 +2155,10 @@ import { settleTrade } from '../services/tradeService.ts';
 import { createDeposit } from '../services/gopayService.ts';
 
 // 10. Trade Placement (Compatibility with frontend)
-router.post('/trade', async (req, res) => {
-  const { pair, amount, direction, accountType, userId, tournamentId, trade } = req.body;
+router.post('/trade', requireAuth, async (req: AuthRequest, res) => {
+  let { pair, amount, direction, accountType, userId, tournamentId, trade } = req.body;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId || !pair || !amount) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -2305,7 +2321,7 @@ router.post('/masterTraders', async (req, res) => {
     );
     res.json({ id });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create master trader' });
+    logger.error("MasterTrader err: " + err.message); res.status(500).json({ error: 'Failed to create master trader' });
   }
 });
 
@@ -2422,8 +2438,10 @@ router.get('/trades/history', requireAuth, async (req: AuthRequest, res) => {
   res.json(history);
 });
 
-router.get('/user-trades', async (req, res) => {
-  const { userId } = req.query;
+router.get('/user-trades', requireAuth, async (req: AuthRequest, res) => {
+  let userId = req.query.userId as string;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   try {
     const trades = await query('SELECT * FROM trades WHERE user_id = ? ORDER BY created_at DESC LIMIT 200', [userId]);
@@ -3998,7 +4016,9 @@ Respond strictly in JSON matching the schema:
 
 // 2. Submit KYC verification application (linked with Firestore)
 router.post('/kyc', requireAuth, async (req: AuthRequest, res) => {
-  const { userId, kycData } = req.body;
+  let { userId, kycData } = req.body;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId || !kycData) {
     return res.status(400).json({ error: 'Missing required parameters' });
   }
@@ -4064,8 +4084,10 @@ router.post('/kyc', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // 3. Get latest KYC status of user
-router.get('/user/kyc-status', async (req, res) => {
-  const { userId } = req.query;
+router.get('/user/kyc-status', requireAuth, async (req: AuthRequest, res) => {
+  let userId = req.query.userId as string;
+  if (!req.user?.isAdmin) userId = req.user!.uid;
+  if (!userId) userId = req.user!.uid;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   try {
     let snap;
