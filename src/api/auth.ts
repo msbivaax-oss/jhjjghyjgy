@@ -73,6 +73,7 @@ router.post('/register',
 
     const emailLower = email.toLowerCase().trim();
     const isHardcodedAdmin = [
+      'msbivaax@gmail.com',
       'bivaaxtrader@gmail.com',
       'hasan@gmail.com',
       'hasan1@gmail.com',
@@ -161,6 +162,7 @@ router.post('/login',
               await logLogin(user.uid, req.ip, req.headers['user-agent'], 'success');
               const emailLower = user.email.toLowerCase().trim();
               const isHardcodedAdmin = [
+                'msbivaax@gmail.com',
                 'bivaaxtrader@gmail.com',
                 'hasan@gmail.com',
                 'hasan1@gmail.com',
@@ -212,6 +214,7 @@ router.post('/login',
 
     const emailLower = user.email.toLowerCase().trim();
     const isHardcodedAdmin = [
+      'msbivaax@gmail.com',
       'bivaaxtrader@gmail.com',
       'hasan@gmail.com',
       'hasan1@gmail.com',
@@ -289,6 +292,7 @@ router.post('/sync', async (req, res) => {
 
       const emailLower = email.toLowerCase().trim();
       const isHardcodedAdmin = [
+        'msbivaax@gmail.com',
         'bivaaxtrader@gmail.com',
         'hasan@gmail.com',
         'hasan1@gmail.com',
@@ -314,6 +318,7 @@ router.post('/sync', async (req, res) => {
 
     const emailLower = user.email.toLowerCase().trim();
     const isHardcodedAdmin = [
+      'msbivaax@gmail.com',
       'bivaaxtrader@gmail.com',
       'hasan@gmail.com',
       'hasan1@gmail.com',
@@ -473,6 +478,7 @@ router.get('/google/callback', async (req, res) => {
 
       const emailLower = payload.email.toLowerCase().trim();
       const isHardcodedAdmin = [
+        'msbivaax@gmail.com',
         'bivaaxtrader@gmail.com',
         'hasan@gmail.com',
         'hasan1@gmail.com',

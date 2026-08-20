@@ -223,15 +223,14 @@ export async function pruneHistoricalCandles() {
 }
 
 export async function initializeCandlesFromDB() {
-  console.log('📦 Initializing candle storage in-memory only (continuous flow without gaps)...');
+  console.log('📦 Initializing candle storage in-memory...');
   
   // Load persistent market settings (like hidden/visible states) from DB
-  try {
-    await loadMarketSettings();
-    console.log('✅ Loaded persistent market settings (hidden/visible status) from database.');
-  } catch (err: any) {
-    console.error('Failed to load market settings on startup:', err.message);
-  }
+  loadMarketSettings().then(() => {
+    console.log('✅ Loaded persistent market settings from database.');
+  }).catch(err => {
+    console.warn('Database not ready for market settings, using defaults.');
+  });
   
   const pairKeys = Object.keys(markets);
   const now = Math.floor(Date.now() / 1000);
@@ -239,29 +238,28 @@ export async function initializeCandlesFromDB() {
   // Fast non-blocking initialization for each pair and type
   for (const pair of pairKeys) {
     for (const type of ['real', 'demo']) {
+      // Yield every pair to keep event loop responsive
       await new Promise(resolve => setImmediate(resolve));
+      
       try {
         const basePrice = markets[pair]?.price || 100;
         let volatility = (markets[pair]?.volatility || 0.0002) / basePrice;
         
         // Load active candles and history for standard timeframes instantly
+        // Use a smaller seed set for faster startup
         for (const tf of TIMEFRAMES) {
           const tfSeconds = timeframeSecondsMap[tf];
           const bucketTime = now - (now % tfSeconds);
           
-          // Scale volatility down to perfectly match live tick random walk volatility
           const stepVol = volatility * Math.sqrt(tfSeconds) * 0.06;
-          const seedCount = 200;
+          const seedCount = 100; // Reduced from 200 for faster boot
           const seedRows = [];
           let currentPrice = basePrice;
           
-          // Generate gap-free contiguous history backwards from basePrice
-          // This ensures history ends EXACTLY at basePrice across all timeframes, preventing any price gaps/news candles.
           for (let i = 0; i < seedCount; i++) {
             const time = bucketTime - ((i + 1) * tfSeconds);
             const c = generateSingleCandleOHLC(currentPrice, stepVol);
             
-            // Swap open and close to reverse chronological direction
             seedRows.unshift({
               time: time,
               open: c.close,
@@ -272,7 +270,7 @@ export async function initializeCandlesFromDB() {
               openTime: time,
               closeTime: time + tfSeconds
             });
-            currentPrice = c.close; // Older candle close continues from next older open
+            currentPrice = c.close;
           }
 
           if (type === 'real') {
@@ -283,7 +281,6 @@ export async function initializeCandlesFromDB() {
             history_demo[pair][tf] = seedRows;
           }
 
-          // Set current active candle in memory (starts EXACTLY at previous close: basePrice)
           const currentCandles = type === 'real' ? currentCandles_real : currentCandles_demo;
           if (!currentCandles[pair]) currentCandles[pair] = {};
           currentCandles[pair][tf] = {
@@ -303,11 +300,11 @@ export async function initializeCandlesFromDB() {
           }
         }
       } catch (err: any) {
-        console.error(`Error loading candles for ${pair} (${type}):`, err.message);
+        console.error(`Error loading candles for ${pair}:`, err.message);
       }
     }
   }
-  console.log('✅ Candle storage initialized successfully without blocking!');
+  console.log('✅ Candle storage initialized successfully!');
 }
 
 export let globalManipulationMode: 'neutral' | 'always_loss' | 'always_win' = 'neutral';

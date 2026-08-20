@@ -13,6 +13,7 @@ import { SupportProvider, useSupport } from './contexts/SupportContext';
 import { LiveSupport } from './components/LiveSupport';
 import { I18nProvider } from './context/I18nContext';
 import AppBoundary from './components/AppBoundary';
+import AdminDashboard from './pages/AdminDashboard';
 
 function SupportModalWrapper({ user }: { user: any | null }) {
   const { isSupportOpen, closeSupport } = useSupport();
@@ -28,7 +29,6 @@ const Tournaments = lazy(() => import('./pages/Tournaments').then(m => ({ defaul
 const TournamentDetails = lazy(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })));
 const Homepage = lazy(() => import('./pages/Homepage'));
 const TradeTerminal = lazy(() => import('./pages/TradeTerminal'));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const SignalsPage = lazy(() => import('./pages/Signals'));
 const CopyTradingPage = lazy(() => import('./pages/CopyTrading'));
 const StaticPage = lazy(() => import('./pages/StaticPage'));

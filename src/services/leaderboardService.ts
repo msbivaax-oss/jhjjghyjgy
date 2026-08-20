@@ -156,16 +156,18 @@ export const fetchLeaderboards = async () => {
     
     try {
       daily = await query(`
-        SELECT t.user_id, 
-               SUM(CASE WHEN t.status = 'won' THEN (CAST(COALESCE(t.payout_amount, 0) AS REAL) - CAST(t.amount AS REAL)) ELSE -CAST(t.amount AS REAL) END) as profit,
-               CAST(u.real_balance AS REAL) as balance,
-               COALESCE(u.nickname, u.display_name) as display_name, u.photo_url, u.country, u.country_code
-        FROM trades t
-        JOIN users u ON t.user_id = u.uid
-        WHERE (t.account_type = 'real' OR t.is_demo = 0) AND t.status IN ('won', 'lost', 'draw')
-        AND t.settled_at >= ?
-        GROUP BY t.user_id
-        HAVING profit > 0
+        SELECT * FROM (
+          SELECT t.user_id, 
+                 SUM(CASE WHEN t.status = 'won' THEN (CAST(COALESCE(t.payout_amount, 0) AS REAL) - CAST(t.amount AS REAL)) ELSE -CAST(t.amount AS REAL) END) as profit,
+                 CAST(u.real_balance AS REAL) as balance,
+                 COALESCE(u.nickname, u.display_name) as display_name, u.photo_url, u.country, u.country_code
+          FROM trades t
+          JOIN users u ON t.user_id = u.uid
+          WHERE (t.account_type = 'real' OR t.is_demo = 0) AND t.status IN ('won', 'lost', 'draw')
+          AND t.settled_at >= ?
+          GROUP BY t.user_id, u.uid, u.real_balance, u.nickname, u.display_name, u.photo_url, u.country, u.country_code
+        ) sub
+        WHERE profit > 0
         ORDER BY profit DESC
         LIMIT 100
       `, [startOfDayTimestamp]) || [];
@@ -177,16 +179,18 @@ export const fetchLeaderboards = async () => {
     const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
     try {
       weekly = await query(`
-        SELECT t.user_id, 
-               SUM(CASE WHEN t.status = 'won' THEN (CAST(COALESCE(t.payout_amount, 0) AS REAL) - CAST(t.amount AS REAL)) ELSE -CAST(t.amount AS REAL) END) as profit,
-               CAST(u.real_balance AS REAL) as balance,
-               COALESCE(u.nickname, u.display_name) as display_name, u.photo_url, u.country, u.country_code
-        FROM trades t
-        JOIN users u ON t.user_id = u.uid
-        WHERE (t.account_type = 'real' OR t.is_demo = 0) AND t.status IN ('won', 'lost', 'draw')
-        AND t.settled_at >= ?
-        GROUP BY t.user_id
-        HAVING profit > 0
+        SELECT * FROM (
+          SELECT t.user_id, 
+                 SUM(CASE WHEN t.status = 'won' THEN (CAST(COALESCE(t.payout_amount, 0) AS REAL) - CAST(t.amount AS REAL)) ELSE -CAST(t.amount AS REAL) END) as profit,
+                 CAST(u.real_balance AS REAL) as balance,
+                 COALESCE(u.nickname, u.display_name) as display_name, u.photo_url, u.country, u.country_code
+          FROM trades t
+          JOIN users u ON t.user_id = u.uid
+          WHERE (t.account_type = 'real' OR t.is_demo = 0) AND t.status IN ('won', 'lost', 'draw')
+          AND t.settled_at >= ?
+          GROUP BY t.user_id, u.uid, u.real_balance, u.nickname, u.display_name, u.photo_url, u.country, u.country_code
+        ) sub
+        WHERE profit > 0
         ORDER BY profit DESC
         LIMIT 100
       `, [sevenDaysAgo]) || [];
@@ -198,16 +202,18 @@ export const fetchLeaderboards = async () => {
     const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
     try {
       monthly = await query(`
-        SELECT t.user_id, 
-               SUM(CASE WHEN t.status = 'won' THEN (CAST(COALESCE(t.payout_amount, 0) AS REAL) - CAST(t.amount AS REAL)) ELSE -CAST(t.amount AS REAL) END) as profit,
-               CAST(u.real_balance AS REAL) as balance,
-               COALESCE(u.nickname, u.display_name) as display_name, u.photo_url, u.country, u.country_code
-        FROM trades t
-        JOIN users u ON t.user_id = u.uid
-        WHERE (t.account_type = 'real' OR t.is_demo = 0) AND t.status IN ('won', 'lost', 'draw')
-        AND t.settled_at >= ?
-        GROUP BY t.user_id
-        HAVING profit > 0
+        SELECT * FROM (
+          SELECT t.user_id, 
+                 SUM(CASE WHEN t.status = 'won' THEN (CAST(COALESCE(t.payout_amount, 0) AS REAL) - CAST(t.amount AS REAL)) ELSE -CAST(t.amount AS REAL) END) as profit,
+                 CAST(u.real_balance AS REAL) as balance,
+                 COALESCE(u.nickname, u.display_name) as display_name, u.photo_url, u.country, u.country_code
+          FROM trades t
+          JOIN users u ON t.user_id = u.uid
+          WHERE (t.account_type = 'real' OR t.is_demo = 0) AND t.status IN ('won', 'lost', 'draw')
+          AND t.settled_at >= ?
+          GROUP BY t.user_id, u.uid, u.real_balance, u.nickname, u.display_name, u.photo_url, u.country, u.country_code
+        ) sub
+        WHERE profit > 0
         ORDER BY profit DESC
         LIMIT 100
       `, [thirtyDaysAgo]) || [];

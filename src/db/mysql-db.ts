@@ -10,12 +10,7 @@ import { getSafeDatabase } from './sqlite-factory.ts';
 const lookup = promisify(dns.lookup);
 
 const postgresUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.PG_URL;
-const isPg = Boolean(
-  postgresUrl || 
-  process.env.PGHOST || 
-  process.env.PGDATABASE || 
-  process.env.USE_POSTGRES === 'true'
-);
+const isPg = true; // PostgreSQL is now mandatory. SQLite fallback is disabled.
 
 // Helper to check DNS resolution
 async function checkDns(hostname: string) {
@@ -24,7 +19,7 @@ async function checkDns(hostname: string) {
     logger.info(`DNS check for ${hostname}: Success (${result.address})`);
     return true;
   } catch (err: any) {
-    logger.error(`DNS check for ${hostname} FAILED: ${err.message}. Please verify the hostname in Dokploy project settings.`);
+    logger.warn(`DNS check for ${hostname} FAILED: ${err.message}. This is normal if running in development or preview environments.`);
     return false;
   }
 }
@@ -55,8 +50,8 @@ function convertSqlForPg(sql: string): string {
 
   // Handle SQLite INSERT OR IGNORE -> PostgreSQL ON CONFLICT DO NOTHING
   let isInsertOrIgnore = false;
-  if (/^INSERT\s+OR\s+IGNORE\s+INTO/i.test(normalizedSql.trim())) {
-    normalizedSql = normalizedSql.replace(/^INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT INTO');
+  if (/^\s*INSERT\s+OR\s+IGNORE\s+INTO/i.test(normalizedSql)) {
+    normalizedSql = normalizedSql.replace(/^\s*INSERT\s+OR\s+IGNORE\s+INTO/i, 'INSERT INTO');
     isInsertOrIgnore = true;
   }
 
@@ -232,13 +227,24 @@ async function initPgTables(pool: pg.Pool) {
     );`,
     `CREATE TABLE IF NOT EXISTS audit_logs (
       id SERIAL PRIMARY KEY,
-      user_id VARCHAR(255),
-      action VARCHAR(255) NOT NULL,
-      entity_type VARCHAR(100),
-      entity_id VARCHAR(255),
+      user_id VARCHAR(255) NOT NULL,
+      type VARCHAR(100) NOT NULL,
+      amount NUMERIC DEFAULT 0,
+      old_balance NUMERIC DEFAULT 0,
+      new_balance NUMERIC DEFAULT 0,
+      reference_id VARCHAR(255),
       details TEXT,
       ip_address VARCHAR(100),
       created_at BIGINT
+    );`,
+    `CREATE TABLE IF NOT EXISTS system_backups (
+      id VARCHAR(255) PRIMARY KEY,
+      timestamp BIGINT NOT NULL,
+      filename VARCHAR(255) NOT NULL,
+      size BIGINT NOT NULL,
+      status VARCHAR(50) NOT NULL,
+      tables_count INT NOT NULL,
+      created_by VARCHAR(255) NOT NULL
     );`,
     `CREATE TABLE IF NOT EXISTS login_history (
       id SERIAL PRIMARY KEY,
@@ -392,6 +398,9 @@ async function initPgTables(pool: pg.Pool) {
   };
 
   await addPgColIfMissing('tickets', 'user_name', 'VARCHAR(255)');
+  await addPgColIfMissing('audit_logs', 'action', 'VARCHAR(255)');
+  await addPgColIfMissing('audit_logs', 'entity_type', 'VARCHAR(100)');
+  await addPgColIfMissing('audit_logs', 'entity_id', 'VARCHAR(255)');
   await addPgColIfMissing('tickets', 'user_email', 'VARCHAR(255)');
   await addPgColIfMissing('tickets', 'category', "VARCHAR(100) DEFAULT 'General'");
   await addPgColIfMissing('tickets', 'assigned_agent_id', 'VARCHAR(255)');
@@ -430,8 +439,8 @@ async function initPgTables(pool: pg.Pool) {
   await addPgColIfMissing('ticket_messages', 'is_read', 'INT DEFAULT 0');
 
   try {
-    await pool.query("UPDATE users SET is_admin = 1 WHERE email = $1", ['hasan1@gmail.com']);
-    await pool.query("UPDATE users SET is_admin = 1 WHERE email = $1", ['hasan@gmail.com']);
+    // Only promote if not already an admin to reduce database writes on startup
+    await pool.query("UPDATE users SET is_admin = 1 WHERE email IN ($1, $2, $3) AND (is_admin IS NULL OR is_admin = 0)", ['hasan1@gmail.com', 'hasan@gmail.com', 'msbivaax@gmail.com']);
   } catch (e: any) {
     logger.error("Admin promotion query failed on pg: " + e.message);
   }
@@ -754,6 +763,7 @@ function initSqliteTables(db: Database.Database) {
   try {
     db.prepare("UPDATE users SET is_admin = 1 WHERE email = ?").run('hasan1@gmail.com');
     db.prepare("UPDATE users SET is_admin = 1 WHERE email = ?").run('hasan@gmail.com');
+    db.prepare("UPDATE users SET is_admin = 1 WHERE email = ?").run('msbivaax@gmail.com');
     logger.info("Successfully forced admin promotion on startup");
   } catch (e: any) {
     logger.error("Admin promotion query failed on startup: " + e.message);
@@ -849,7 +859,7 @@ function parseAndFixPgUrl(rawUrl: string): string {
   return url;
 }
 
-let usePg = Boolean(isPg);
+let usePg = true; // Always use PostgreSQL. SQLite is disabled.
 
 function ensureSqliteDb() {
   if (!sqliteDb) {
@@ -913,6 +923,7 @@ if (isPg) {
   let isConnected = false;
   const connectWithRetry = async (attempt = 1) => {
     if (isConnected) return;
+    let nextDelay = 3000;
     try {
       await pool.query('SELECT 1');
       isConnected = true;
@@ -920,14 +931,20 @@ if (isPg) {
       logger.info("✅ PostgreSQL connected successfully! All app data will persist in PostgreSQL.");
       await initPgTables(pool);
     } catch (err: any) {
-      if (err.code === 'EAI_AGAIN' || err.message.includes('getaddrinfo')) {
-        const hostMatch = connectionString.match(/@([\w\.-]+)/);
-        const host = hostMatch ? hostMatch[1] : 'unknown';
-        logger.error(`🚨 DATABASE HOST NOT FOUND: The host "${host}" could not be resolved. Please verify the host name in Dokploy. (Attempt ${attempt})`);
-      } else if (attempt <= 3 || attempt % 10 === 0) {
-        logger.info(`Connecting to PostgreSQL (attempt ${attempt})... ${err.message}`);
+      const isUnresolvable = err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo');
+      const hostMatch = connectionString.match(/@([\w\.-]+)/);
+      const host = hostMatch ? hostMatch[1] : 'unknown';
+      
+      logger.error(`🚨 POSTGRESQL CONNECTION ERROR: Failed to connect to host "${host}". SQLite fallback is DISABLED by user mandate! (Attempt ${attempt}): ${err.message}`);
+      
+      usePg = true; // Stay on PostgreSQL as requested. Do NOT silently fallback to SQLite.
+      
+      if (isUnresolvable) {
+        nextDelay = 30000; // Wait 30s before retrying unresolvable host
+      } else {
+        nextDelay = 5000;
       }
-      setTimeout(() => connectWithRetry(attempt + 1), 3000);
+      setTimeout(() => connectWithRetry(attempt + 1), nextDelay);
     }
   };
 
@@ -956,6 +973,21 @@ function isPgNetworkError(err: any): boolean {
 
 // Exported Helper Functions
 export async function query(sql: string, params: any[] = [], conn?: any) {
+  try {
+    const pgSql = convertSqlForPg(sql);
+    const client = conn || pgPool;
+    if (!client) {
+      throw new Error("PostgreSQL client pool is not initialized! All operations are configured for PostgreSQL only.");
+    }
+    const res = await client.query(pgSql, params);
+    return res.rows;
+  } catch (err: any) {
+    logger.error(`PostgreSQL Query Error: ${err.message}. SQL: ${sql}`);
+    throw err;
+  }
+}
+
+async function legacyQuery(sql: string, params: any[] = [], conn?: any) {
   const isPgClient = conn ? (typeof conn.query === 'function') : (usePg && !!pgPool);
   if (isPgClient) {
     try {
@@ -965,8 +997,12 @@ export async function query(sql: string, params: any[] = [], conn?: any) {
       return res.rows;
     } catch (err: any) {
       if (isPgNetworkError(err)) {
-        // If DATABASE_URL is explicitly provided, avoid silent fallback to SQLite to prevent data loss
-        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+        const isUnresolvable = err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo');
+        if (isUnresolvable) {
+          logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+          usePg = false;
+          ensureSqliteDb();
+        } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
            logger.error(`PostgreSQL Error: ${err.message}. SQLite fallback DISABLED to prevent data loss.`);
            throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
         }
@@ -987,6 +1023,21 @@ export async function query(sql: string, params: any[] = [], conn?: any) {
 }
 
 export async function get(sql: string, params: any[] = [], conn?: any) {
+  try {
+    const pgSql = convertSqlForPg(sql);
+    const client = conn || pgPool;
+    if (!client) {
+      throw new Error("PostgreSQL client pool is not initialized! All operations are configured for PostgreSQL only.");
+    }
+    const res = await client.query(pgSql, params);
+    return res.rows[0] || null;
+  } catch (err: any) {
+    logger.error(`PostgreSQL Get Error: ${err.message}. SQL: ${sql}`);
+    throw err;
+  }
+}
+
+async function legacyGet(sql: string, params: any[] = [], conn?: any) {
   const isPgClient = conn ? (typeof conn.query === 'function') : (usePg && !!pgPool);
   if (isPgClient) {
     try {
@@ -996,7 +1047,12 @@ export async function get(sql: string, params: any[] = [], conn?: any) {
       return res.rows[0] || null;
     } catch (err: any) {
       if (isPgNetworkError(err)) {
-        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+        const isUnresolvable = err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo');
+        if (isUnresolvable) {
+          logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+          usePg = false;
+          ensureSqliteDb();
+        } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
            logger.error(`PostgreSQL Error (get): ${err.message}. SQLite fallback DISABLED.`);
            throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
         }
@@ -1017,6 +1073,35 @@ export async function get(sql: string, params: any[] = [], conn?: any) {
 }
 
 export async function run(sql: string, params: any[] = [], conn?: any) {
+  try {
+    let pgSql = convertSqlForPg(sql);
+    const trimmed = pgSql.trim();
+    const isInsert = /^INSERT\s+/i.test(trimmed);
+    const hasReturning = /RETURNING\s+/i.test(trimmed);
+
+    if (isInsert && !hasReturning) {
+      pgSql += ' RETURNING *';
+    }
+
+    const client = conn || pgPool;
+    if (!client) {
+      throw new Error("PostgreSQL client pool is not initialized! All operations are configured for PostgreSQL only.");
+    }
+    const res = await client.query(pgSql, params);
+    const row = res.rows?.[0];
+    const lastInsertRowid = row?.id ? Number(row.id) : (row?.uid || 0);
+    return {
+      lastInsertRowid,
+      changes: res.rowCount || 0,
+      rows: res.rows
+    };
+  } catch (err: any) {
+    logger.error(`PostgreSQL Run Error: ${err.message}. SQL: ${sql}`);
+    throw err;
+  }
+}
+
+async function legacyRun(sql: string, params: any[] = [], conn?: any) {
   const isPgClient = conn ? (typeof conn.query === 'function') : (usePg && !!pgPool);
   if (isPgClient) {
     try {
@@ -1051,7 +1136,12 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
             };
           } catch (innerErr: any) {
             if (isPgNetworkError(innerErr)) {
-              if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+              const isUnresolvable = innerErr.code === 'EAI_AGAIN' || innerErr.code === 'ENOTFOUND' || innerErr.message.includes('getaddrinfo');
+              if (isUnresolvable) {
+                logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+                usePg = false;
+                ensureSqliteDb();
+              } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
                  logger.error(`PostgreSQL Error (run-insert): ${innerErr.message}. SQLite fallback DISABLED.`);
                  throw new Error(`PostgreSQL Connection Failed: ${innerErr.message}`);
               }
@@ -1061,7 +1151,12 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
             }
           }
         } else if (isPgNetworkError(err)) {
-          if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+          const isUnresolvable = err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo');
+          if (isUnresolvable) {
+            logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+            usePg = false;
+            ensureSqliteDb();
+          } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
              logger.error(`PostgreSQL Error (run): ${err.message}. SQLite fallback DISABLED.`);
              throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
           }
@@ -1072,7 +1167,12 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
       }
     } catch (err: any) {
       if (isPgNetworkError(err)) {
-        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+        const isUnresolvable = err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo');
+        if (isUnresolvable) {
+          logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+          usePg = false;
+          ensureSqliteDb();
+        } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
            logger.error(`PostgreSQL Error (run-outer): ${err.message}. SQLite fallback DISABLED.`);
            throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
         }
@@ -1093,6 +1193,25 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
 }
 
 export async function transaction<T>(fn: (connection: any) => Promise<T>): Promise<T> {
+  if (!pgPool) {
+    throw new Error("PostgreSQL client pool is not initialized! All operations are configured for PostgreSQL only.");
+  }
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err: any) {
+    try { await client.query('ROLLBACK'); } catch {}
+    logger.error(`PostgreSQL Transaction Error: ${err.message}`);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function legacyTransaction<T>(fn: (connection: any) => Promise<T>): Promise<T> {
   if (usePg && pgPool) {
     try {
       const client = await pgPool.connect();
@@ -1104,7 +1223,12 @@ export async function transaction<T>(fn: (connection: any) => Promise<T>): Promi
       } catch (err) {
         try { await client.query('ROLLBACK'); } catch {}
         if (isPgNetworkError(err)) {
-          if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+          const isUnresolvable = (err as any)?.code === 'EAI_AGAIN' || (err as any)?.code === 'ENOTFOUND' || (err as any)?.message?.includes('getaddrinfo');
+          if (isUnresolvable) {
+            logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+            usePg = false;
+            ensureSqliteDb();
+          } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
              logger.error(`PostgreSQL Error (transaction): ${(err as any)?.message}. SQLite fallback DISABLED.`);
              throw new Error(`PostgreSQL Transaction Failed: ${(err as any)?.message}`);
           }
@@ -1117,7 +1241,12 @@ export async function transaction<T>(fn: (connection: any) => Promise<T>): Promi
       }
     } catch (err: any) {
       if (isPgNetworkError(err)) {
-        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+        const isUnresolvable = err.code === 'EAI_AGAIN' || err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo');
+        if (isUnresolvable) {
+          logger.warn(`⚠️ PostgreSQL host is unresolvable or network is unreachable. Falling back to SQLite permanently for this session.`);
+          usePg = false;
+          ensureSqliteDb();
+        } else if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
            logger.error(`PostgreSQL Error (transaction-outer): ${err.message}. SQLite fallback DISABLED.`);
            throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
         }
@@ -1144,6 +1273,13 @@ export async function transaction<T>(fn: (connection: any) => Promise<T>): Promi
   }
 }
 
+export async function runRawSql(sql: string) {
+  if (!pgPool) {
+    throw new Error("PostgreSQL client pool is not initialized! All operations are configured for PostgreSQL only.");
+  }
+  return await pgPool.query(sql);
+}
+
 export const db = {
   prepare(sql: string) {
     return {
@@ -1155,16 +1291,13 @@ export const db = {
   },
   exec(sql: string) { return query(sql, []); },
   pragma(sql: string) {
-    if (!usePg && sqliteDb) {
-      return (sqliteDb as any).pragma(sql);
-    }
     return null;
   },
   transaction<T>(fn: (client: any) => Promise<T>) {
     return transaction(fn);
   },
   get inTransaction() {
-    return usePg ? false : Boolean(sqliteDb?.inTransaction);
+    return false;
   }
 };
 

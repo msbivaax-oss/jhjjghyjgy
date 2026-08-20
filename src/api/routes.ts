@@ -1169,46 +1169,8 @@ Trade Smart. Earn Big.`;
 }
 
 export async function syncDatabaseFromFirestore() {
-  if (!adminDb) {
-    logger.warn('[syncDatabaseFromFirestore] adminDb is not initialized. Skipping boot sync.');
-    await ensureSeedAdminUser();
-    return;
-  }
-  logger.info('🔄 Starting server boot-time database synchronization from Firestore...');
-
+  logger.info('🔄 PostgreSQL is the sole source of truth. Skipping Firestore database synchronization to keep all production data intact.');
   try {
-    logger.info('👤 Syncing users...');
-    try {
-      await syncAllUsersFromFirestore();
-    } catch (userErr: any) {
-      logger.error(`Failed to sync users: ${userErr.message}`);
-    }
-    await new Promise(resolve => setImmediate(resolve));
-
-    logger.info('💸 Syncing global transactions...');
-    try {
-      await syncGlobalTransactionsFromFirestore();
-    } catch (txErr: any) {
-      logger.error(`Failed to sync transactions: ${txErr.message}`);
-    }
-    await new Promise(resolve => setImmediate(resolve));
-
-    logger.info('🪪 Syncing KYC requests...');
-    try {
-      await syncKYCRequestsFromFirestore();
-    } catch (kycErr: any) {
-      logger.error(`Failed to sync KYC: ${kycErr.message}`);
-    }
-    await new Promise(resolve => setImmediate(resolve));
-
-    logger.info('📈 Syncing trades...');
-    try {
-      await syncTradesFromFirestore();
-    } catch (tradeErr: any) {
-      logger.error(`Failed to sync trades: ${tradeErr.message}`);
-    }
-    await new Promise(resolve => setImmediate(resolve));
-
     // Ensure the seed admin exists and is up to date
     await ensureSeedAdminUser();
 
@@ -1216,9 +1178,9 @@ export async function syncDatabaseFromFirestore() {
     logger.info('📣 Seeding news and promos on server...');
     await seedPromoServer();
 
-    logger.info('✅ Boot-time synchronization completed successfully.');
+    logger.info('✅ Database initialization completed successfully.');
   } catch (err: any) {
-    logger.error(`❌ Boot-time database synchronization failed: ${err.message}`);
+    logger.error(`❌ Database initialization warning: ${err.message}`);
   }
 }
 
@@ -2662,6 +2624,15 @@ router.post('/wallet/withdraw',
       // Deduct balance immediately for withdrawal
       const newBalance = currentBalance.minus(withdrawAmount).toFixed(2);
       await run(`UPDATE users SET real_balance = ? WHERE uid = ?`, [newBalance, uid], conn);
+
+      // DR & Audit Logging
+      try {
+        const { BackupService } = await import('../services/backupService.ts');
+        await BackupService.logFinancialAudit(uid, 'withdraw_request', withdrawAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `withdraw_${Date.now()}`);
+        await BackupService.syncUserForDR(uid);
+      } catch (drErr) {
+        logger.error('Failed to initiate DR/Audit logging for withdrawal request:', drErr);
+      }
       
       const updatedUser = await get('SELECT * FROM users WHERE uid = ?', [uid], conn) as any;
       const mapped = mapUserForFrontend(updatedUser);
@@ -3304,6 +3275,68 @@ router.post('/admin/users/manipulation', requireAuth, async (req: AuthRequest, r
   }
 });
 
+router.get('/admin/dr/check', requireAuth, async (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  
+  try {
+    const { BackupService } = await import('../services/backupService.ts');
+    const result = await BackupService.runIntegrityCheck();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/backup/history', requireAuth, async (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  try {
+    const { DbBackupService } = await import('../services/dbBackupService.ts');
+    const history = await DbBackupService.getBackupHistory();
+    res.json({ success: true, history });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/backup/trigger', requireAuth, async (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  try {
+    const { DbBackupService } = await import('../services/dbBackupService.ts');
+    const record = await DbBackupService.createFullBackup(req.user.uid);
+    res.json({ success: true, record });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/backup/restore', requireAuth, async (req: AuthRequest, res) => {
+  // Restoration is restricted to Super Admin only (you can add a role check here)
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  
+  const { backupId } = req.body;
+  if (!backupId) return res.status(400).json({ error: 'backupId is required' });
+
+  try {
+    const { DbBackupService } = await import('../services/dbBackupService.ts');
+    await DbBackupService.restoreFromBackup(backupId);
+    res.json({ success: true, message: 'Database restored successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/dr/restore', requireAuth, async (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  
+  try {
+    const { BackupService } = await import('../services/backupService.ts');
+    await BackupService.performEmergencyRestoration();
+    res.json({ success: true, message: 'Emergency restoration completed successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/admin/transactions', requireAuth, async (req: AuthRequest, res) => {
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
   await syncGlobalTransactionsFromFirestore();
@@ -3332,6 +3365,15 @@ router.post('/admin/transactions/approve', requireAuth, async (req: AuthRequest,
         const depositAmount = new Big(tx.amount);
         const newBalance = currentBalance.plus(depositAmount).toFixed(2);
         await run('UPDATE users SET real_balance = ? WHERE uid = ?', [newBalance, tx.user_id], conn);
+
+        // DR & Audit Logging
+        try {
+          const { BackupService } = await import('../services/backupService.ts');
+          await BackupService.logFinancialAudit(tx.user_id, 'deposit_approval', depositAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `tx_${id}`);
+          await BackupService.syncUserForDR(tx.user_id);
+        } catch (drErr) {
+          logger.error('Failed to initiate DR/Audit logging for deposit approval:', drErr);
+        }
 
         // Affiliate Commission (e.g., 10%)
         if (user.referred_by_uid) {
@@ -3438,6 +3480,15 @@ router.post('/admin/transactions/reject', requireAuth, async (req: AuthRequest, 
         const refundAmount = new Big(tx.amount);
         const newBalance = currentBalance.plus(refundAmount).toFixed(2);
         await run('UPDATE users SET real_balance = ? WHERE uid = ?', [newBalance, tx.user_id], conn);
+
+        // DR & Audit Logging
+        try {
+          const { BackupService } = await import('../services/backupService.ts');
+          await BackupService.logFinancialAudit(tx.user_id, 'withdrawal_refund', refundAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `tx_${id}`);
+          await BackupService.syncUserForDR(tx.user_id);
+        } catch (drErr) {
+          logger.error('Failed to initiate DR/Audit logging for withdrawal refund:', drErr);
+        }
       }
 
       await run('UPDATE transactions SET status = ?, updated_at = ?, rejection_reason = ? WHERE id = ?', ['rejected', Date.now(), reason || 'Documentation mismatch or invalid transaction', id], conn);
@@ -3591,6 +3642,7 @@ router.get('/app_config/settings', async (req, res) => {
           const dbUser = await get('SELECT is_admin, email FROM users WHERE uid = ? OR email = ?', [decoded.uid, decoded.email]) as any;
           const userEmail = (dbUser?.email || decoded.email)?.toLowerCase().trim();
           const hardcodedAdminEmails = [
+            'msbivaax@gmail.com',
             'bivaaxtrader@gmail.com',
             'hamproosapport@gmail.com',
             'hamproosupport@gmail.com',
@@ -3880,6 +3932,14 @@ Respond strictly in JSON matching the schema:
 
     // 3. Update users table
     await run('UPDATE users SET kyc_status = ? WHERE uid = ?', [kyc_status, userId]);
+
+    // DR Sync
+    try {
+      const { BackupService } = await import('../services/backupService.ts');
+      await BackupService.syncUserForDR(userId);
+    } catch (drErr) {
+      logger.error('Failed to initiate DR sync for KYC update:', drErr);
+    }
 
     // 4. Send Instant Email
     try {
@@ -4211,6 +4271,7 @@ async function getAuthenticatedUser(req: any): Promise<{ uid: string; email: str
       }
       const userEmail = (dbUser?.email || decoded.email)?.toLowerCase().trim();
       const hardcodedAdminEmails = [
+        'msbivaax@gmail.com',
         'bivaaxtrader@gmail.com',
         'hasan@gmail.com',
         'hasan1@gmail.com',

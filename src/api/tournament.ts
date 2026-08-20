@@ -8,6 +8,16 @@ import { syncTournamentScoreToFirestore } from '../lib/firebase-admin.ts';
 
 const router = express.Router();
 
+function safeJsonParse(val: any) {
+  if (!val) return null;
+  if (typeof val === 'object') return val;
+  try {
+    return JSON.parse(val);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 1. Fetch all tournaments
  */
@@ -27,7 +37,7 @@ router.get('/tournaments', async (req, res) => {
       return {
         ...t,
         participantsCount: count?.cnt || 0,
-        requirements: t.requirements ? JSON.parse(t.requirements) : null,
+        requirements: safeJsonParse(t.requirements),
         isJoined
       };
     }));
@@ -53,7 +63,7 @@ router.get('/tournaments/:id', async (req, res) => {
     const leaderboard = await query(
       `SELECT tp.*, u.display_name, u.email, u.photo_url 
        FROM tournament_participants tp
-       JOIN users u ON tp.user_id = u.uid
+       LEFT JOIN users u ON tp.user_id = u.uid
        WHERE tp.tournament_id = ?
        ORDER BY tp.score DESC, tp.joined_at ASC
        LIMIT 100`,
@@ -69,15 +79,15 @@ router.get('/tournaments/:id', async (req, res) => {
     }
 
     res.json({
-      success: true,
-      tournament: {
-        ...tournament,
-        requirements: tournament.requirements ? JSON.parse(tournament.requirements) : null,
-        isJoined
-      },
-      leaderboard,
-      prizes
-    });
+       success: true,
+       tournament: {
+         ...tournament,
+         requirements: safeJsonParse(tournament.requirements),
+         isJoined
+       },
+       leaderboard,
+       prizes
+     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -359,6 +359,16 @@ Sitemap: https://bivaax.com/sitemap.xml`);
     });
   }, 5000);
 
+  // PRE-BOOT SAFETY: Create a backup before any synchronization or market engine starts
+  try {
+    const { DbBackupService } = await import('./src/services/dbBackupService.ts');
+    console.log('🛡️ [SAFE-DEPLOYMENT] Creating pre-boot recovery point...');
+    await DbBackupService.createFullBackup('system_pre_boot');
+    console.log('✅ [SAFE-DEPLOYMENT] Pre-boot backup secured.');
+  } catch (err: any) {
+    console.warn('⚠️ [SAFE-DEPLOYMENT] Pre-boot backup skipped/failed:', err.message);
+  }
+
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
     
@@ -384,7 +394,7 @@ Sitemap: https://bivaax.com/sitemap.xml`);
       // 3. Start Market Engine (starts price generation ticker)
       setTimeout(async () => {
         console.log('📈 Starting Market Engine...');
-        await loadMarketSettings();
+        loadMarketSettings().catch(() => {}); // Non-blocking
         startMarketEngine();
         
         // 4. Start Copy Trading Simulation
@@ -392,6 +402,20 @@ Sitemap: https://bivaax.com/sitemap.xml`);
           console.log('👥 Starting Copy Trading Simulation...');
           startMasterSimulation();
         }, 10000);
+
+        // 5. Schedule Daily Database Backup (3 AM)
+        setInterval(async () => {
+          const now = new Date();
+          if (now.getHours() === 3 && now.getMinutes() === 0) {
+            try {
+              const { DbBackupService } = await import('./src/services/dbBackupService.ts');
+              console.log('[SCHEDULE] Running daily automated backup...');
+              await DbBackupService.createFullBackup('system_automated');
+            } catch (err) {
+              console.error('Automated backup failed:', err);
+            }
+          }
+        }, 60000);
       }, 5000);
       
     }, 2000);

@@ -46,6 +46,7 @@ export async function startMarketEngine() {
   // Main Ticker Loop (using recursive timeout)
   let tickCount = 0;
   const runTicker = async () => {
+    // Market engine should always run if system is active, even if DB is still connecting
     if (systemActive) {
       try {
         const io = getIO();
@@ -55,22 +56,26 @@ export async function startMarketEngine() {
         const tickDataReal: Record<string, any> = {};
         
         tickCount++;
-        const isSummaryTick = tickCount % 5 === 0; // Every 1 second (5 * 200ms)
+        const isSummaryTick = tickCount % 4 === 0; // Approx every 1 second
 
         for (const pair of marketKeys) {
-          // Process REAL market continuously for all pairs
-          const roomNameReal = `market_${pair}_real`;
-          const realTick = updatePair(pair, 'real', nowSec);
-          if (realTick) {
-            io.to(roomNameReal).emit('market_tick', { pair, ...realTick });
-            tickDataReal[pair] = realTick;
-          }
+          try {
+            // Process REAL market continuously for all pairs
+            const roomNameReal = `market_${pair}_real`;
+            const realTick = updatePair(pair, 'real', nowSec);
+            if (realTick) {
+              io.to(roomNameReal).emit('market_tick', { pair, ...realTick });
+              tickDataReal[pair] = realTick;
+            }
 
-          // Process DEMO market continuously for all pairs
-          const roomNameDemo = `market_${pair}_demo`;
-          const demoTick = updatePair(pair, 'demo', nowSec);
-          if (demoTick) {
-            io.to(roomNameDemo).emit('market_tick', { pair, ...demoTick });
+            // Process DEMO market continuously for all pairs
+            const roomNameDemo = `market_${pair}_demo`;
+            const demoTick = updatePair(pair, 'demo', nowSec);
+            if (demoTick) {
+              io.to(roomNameDemo).emit('market_tick', { pair, ...demoTick });
+            }
+          } catch (pairErr) {
+            // Prevent one broken pair from stopping the entire engine
           }
         }
 
@@ -78,6 +83,7 @@ export async function startMarketEngine() {
         if (Object.keys(tickDataReal).length > 0) {
           io.emit('market_ticks', tickDataReal);
         }
+        
         if (isSummaryTick) {
           tickCount = 0;
         }

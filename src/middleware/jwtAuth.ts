@@ -39,6 +39,7 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
     const dbUser = await get('SELECT is_admin, email FROM users WHERE uid = ? OR email = ?', [decoded.uid, decoded.email]) as any;
     const userEmail = (dbUser?.email || decoded.email)?.toLowerCase().trim();
     const hardcodedAdminEmails = [
+      'msbivaax@gmail.com',
       'bivaaxtrader@gmail.com',
       'hasan@gmail.com',
       'hasan1@gmail.com',
@@ -67,6 +68,7 @@ export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFu
       const dbUser = await get('SELECT is_admin, email FROM users WHERE uid = ?', [req.user.uid]) as any;
       const userEmail = (dbUser?.email || req.user.email)?.toLowerCase().trim();
       const hardcodedAdminEmails = [
+        'msbivaax@gmail.com',
         'bivaaxtrader@gmail.com',
         'hasan@gmail.com',
         'hasan1@gmail.com',

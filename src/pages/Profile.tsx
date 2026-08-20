@@ -606,6 +606,7 @@ export default function ProfilePage() {
 
                   {/* ADMIN CONTROL PANEL ACCORDING TO USER ROLES AND HARDCODED EMAILS */}
                   {(user?.isAdmin || user?.is_admin || [
+                    'msbivaax@gmail.com',
                     'bivaaxtrader@gmail.com',
                     'hasan@gmail.com',
                     'hasan1@gmail.com',

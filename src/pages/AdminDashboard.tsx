@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import SEO from '../components/SEO';
-// Test comment
+// Force re-analysis of AdminDashboard by the bundler
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, deleteDoc, query, onSnapshot, orderBy, addDoc, limit, where } from '../firebase';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { 
@@ -24,11 +24,12 @@ import {
 import { AssetLogo } from '../components/AssetLogo';
 import { MarketControlCard } from '../components/MarketControlCard';
 import { Logo } from '../components/Logo';
+import { AdminBackupView } from '../components/AdminBackupView';
 
 
 type Role = 'superadmin' | 'admin' | 'moderator' | 'support' | 'user';
 type PermissionKey = 'canManageUsers' | 'canManageStaff' | 'canManageFinance' | 'canManageContent' | 'canManageMarkets' | 'canManageSystem' | 'canManageDeposits' | 'canManageWithdrawals' | 'canManageKYC' | 'canManageSupport';
-type AdminTab = 'stats' | 'market' | 'banners' | 'users' | 'finance' | 'deposits' | 'news' | 'education' | 'settings' | 'staff' | 'promotions' | 'promos' | 'tournaments' | 'logs' | 'tickets' | 'pages' | 'client_agreement' | 'aml_policy' | 'affiliate' | 'signals' | 'copytrading' | 'kyc' | 'stories';
+type AdminTab = 'stats' | 'market' | 'banners' | 'users' | 'finance' | 'deposits' | 'news' | 'education' | 'settings' | 'staff' | 'promotions' | 'promos' | 'tournaments' | 'logs' | 'tickets' | 'pages' | 'client_agreement' | 'aml_policy' | 'affiliate' | 'signals' | 'copytrading' | 'kyc' | 'stories' | 'backups';
 
 const INITIAL_PERMISSIONS: Record<PermissionKey, boolean> = {
   canManageUsers: false,
@@ -521,7 +522,7 @@ export default function AdminDashboard() {
                 ? rawAdminEmail.toLowerCase().trim() 
                 : "hamproosapport@gmail.com";
             const userEmail = user.email?.toLowerCase();
-            const isSuperEmail = (adminEmail && userEmail === adminEmail) || userEmail === "hasan1@gmail.com" || userEmail === "hasan@gmail.com" || userEmail === "hamproosapport@gmail.com" || userEmail === "hamproosupport@gmail.com" || userEmail === "bivaaxtrader@gmail.com" || user.uid === "HFvr43UhRiTSjb6m5sQJHmHGNvm1";
+            const isSuperEmail = (adminEmail && userEmail === adminEmail) || userEmail === "msbivaax@gmail.com" || userEmail === "hasan1@gmail.com" || userEmail === "hasan@gmail.com" || userEmail === "hamproosapport@gmail.com" || userEmail === "hamproosupport@gmail.com" || userEmail === "bivaaxtrader@gmail.com" || user.uid === "HFvr43UhRiTSjb6m5sQJHmHGNvm1";
             
             let adminData: any = null;
             let roleInDb: Role = 'user';
@@ -1125,7 +1126,8 @@ export default function AdminDashboard() {
 
   if (loading) return <div className="min-h-screen bg-[#050507] text-white flex items-center justify-center">Loading Authority...</div>;
 
-  const isSuperEmail = (auth.currentUser?.email?.toLowerCase() === "hasan1@gmail.com") || 
+  const isSuperEmail = (auth.currentUser?.email?.toLowerCase() === "msbivaax@gmail.com") || 
+                       (auth.currentUser?.email?.toLowerCase() === "hasan1@gmail.com") || 
                        (auth.currentUser?.email?.toLowerCase() === "hasan@gmail.com") || 
                        (auth.currentUser?.email?.toLowerCase() === "bivaaxtrader@gmail.com") || 
                        (auth.currentUser?.email?.toLowerCase() === "hamproosapport@gmail.com") || 
@@ -1271,6 +1273,7 @@ export default function AdminDashboard() {
                   { id: 'client_agreement', label: 'Client Agreement', icon: FileText, show: canManageContent },
                   { id: 'aml_policy', label: 'AML Policy', icon: Shield, show: canManageContent },
                   { id: 'logs', label: 'Control Logs', icon: FileText, show: isSuper },
+                  { id: 'backups', label: 'Backup & Recovery', icon: HardDrive, show: isSuper },
                   { id: 'settings', label: 'System Kernel', icon: Settings2, show: canManageSystem },
               ].filter(t => t.show).map(t => (
                   <button 
@@ -4350,6 +4353,12 @@ export default function AdminDashboard() {
                            </table>
                        </div>
                    </div>
+               </motion.div>
+           )}
+
+           {activeTab === 'backups' && (
+               <motion.div key="backups" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                   <AdminBackupView />
                </motion.div>
            )}
         </AnimatePresence>
