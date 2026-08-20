@@ -419,7 +419,7 @@ router.post('/auth/register', async (req, res) => {
     }
 
     await run(
-      `INSERT INTO users (uid, email, password_hash, display_name, nickname, referral_code, country, country_code, referred_by_uid, referral_sub_id, referral_type) 
+      `INSERT OR IGNORE INTO users (uid, email, password_hash, display_name, nickname, referral_code, country, country_code, referred_by_uid, referral_sub_id, referral_type) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [uid, email, passwordHash, fullName, fullName.split(' ')[0], affiliateId, cName, cCode, referredBy, referralSubId || null, referralType || null]
     );
@@ -1039,7 +1039,7 @@ export async function ensureSeedAdminUser() {
       const uid = 'admin_seed_' + Math.random().toString(36).substring(2, 10);
       const affiliateId = Math.random().toString(36).substring(2, 8).toUpperCase();
       await run(
-        `INSERT INTO users (uid, email, password_hash, display_name, nickname, referral_code, is_admin, real_balance, demo_balance, created_at) 
+        `INSERT OR IGNORE INTO users (uid, email, password_hash, display_name, nickname, referral_code, is_admin, real_balance, demo_balance, created_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [uid, adminEmail, hashedPassword, 'Bivaax Super Admin', 'Admin', affiliateId, 1, 1000.00, 10000.00, Date.now()]
       );
@@ -1364,7 +1364,7 @@ router.post('/user/sync', async (req, res) => {
       const email = req.body.email || '';
       const displayName = req.body.displayName || '';
       await run(
-        `INSERT INTO users (uid, email, display_name, real_balance, demo_balance, kyc_status, is_verified) 
+        `INSERT OR IGNORE INTO users (uid, email, display_name, real_balance, demo_balance, kyc_status, is_verified) 
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [uid, email, displayName, 0, 10000, 'unverified', 0]
       );
@@ -2888,7 +2888,7 @@ router.post('/admin/deposits/update', requireAuth, async (req: AuthRequest, res)
         if (fbUser.exists) {
           const fbData = fbUser.data() || {};
           await run(
-            `INSERT INTO users (uid, email, display_name, real_balance, demo_balance, country) 
+            `INSERT OR IGNORE INTO users (uid, email, display_name, real_balance, demo_balance, country) 
              VALUES (?, ?, ?, ?, ?, ?)`,
             [userId, fbData.email || '', fbData.displayName || fbData.name || '', fbData.balance || 0, fbData.demoBalance || 10000, fbData.country || '']
           );
@@ -3098,7 +3098,7 @@ router.post('/admin/withdrawals/update', requireAuth, async (req: AuthRequest, r
         if (fbUser.exists) {
           const fbData = fbUser.data();
           await run(
-            `INSERT INTO users (uid, email, display_name, real_balance, demo_balance, country) 
+            `INSERT OR IGNORE INTO users (uid, email, display_name, real_balance, demo_balance, country) 
              VALUES (?, ?, ?, ?, ?, ?)`,
             [userId, fbData.email || '', fbData.displayName || fbData.name || '', fbData.balance || 0, fbData.demoBalance || 10000, fbData.country || '']
           );

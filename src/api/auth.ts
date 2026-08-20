@@ -82,7 +82,7 @@ router.post('/register',
     ].filter(Boolean).includes(emailLower);
 
     await run(
-      `INSERT INTO users (uid, email, password, referral_code, referred_by_uid, referral_sub_id, referral_type, is_admin) 
+      `INSERT OR IGNORE INTO users (uid, email, password, referral_code, referred_by_uid, referral_sub_id, referral_type, is_admin) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [uid, email, hashedPassword, affiliateId, referredBy, referralSubId || null, referralType || null, isHardcodedAdmin ? 1 : 0]
     );
@@ -298,7 +298,7 @@ router.post('/sync', async (req, res) => {
       ].filter(Boolean).includes(emailLower);
 
       await run(
-        `INSERT INTO users (uid, email, display_name, photo_url, referral_code, referred_by_uid, referral_sub_id, referral_type, is_admin, is_verified) 
+        `INSERT OR IGNORE INTO users (uid, email, display_name, photo_url, referral_code, referred_by_uid, referral_sub_id, referral_type, is_admin, is_verified) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [firebaseUid, email, name || email.split('@')[0], picture || null, affiliateId, referredBy, referralSubId || null, referralType || null, isHardcodedAdmin ? 1 : 0, email_verified ? 1 : 0]
       );
@@ -307,7 +307,7 @@ router.post('/sync', async (req, res) => {
         await run('UPDATE users SET referral_count = referral_count + 1 WHERE uid = ?', [referredBy]);
       }
 
-      user = await get('SELECT * FROM users WHERE uid = ?', [firebaseUid]) as any;
+      user = await get('SELECT * FROM users WHERE uid = ? OR email = ?', [firebaseUid, email]) as any;
       // Sync again to make sure everything is clean
       await authoritativeSync(firebaseUid);
     }
@@ -482,7 +482,7 @@ router.get('/google/callback', async (req, res) => {
       ].filter(Boolean).includes(emailLower);
 
       await run(
-        `INSERT INTO users (uid, email, display_name, photo_url, referral_code, referred_by_uid, referral_sub_id, referral_type, country, country_code, real_balance, demo_balance, is_admin, is_verified, kyc_status) 
+        `INSERT OR IGNORE INTO users (uid, email, display_name, photo_url, referral_code, referred_by_uid, referral_sub_id, referral_type, country, country_code, real_balance, demo_balance, is_admin, is_verified, kyc_status) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
         [
           uid,
@@ -506,7 +506,7 @@ router.get('/google/callback', async (req, res) => {
         await run('UPDATE users SET referral_count = referral_count + 1 WHERE uid = ?', [referredBy]);
       }
 
-      user = await get('SELECT * FROM users WHERE uid = ?', [uid]);
+      user = await get('SELECT * FROM users WHERE uid = ? OR email = ?', [uid, payload.email]);
     }
 
     const token = generateToken({ uid: user.uid, email: user.email, isAdmin: !!user.is_admin });

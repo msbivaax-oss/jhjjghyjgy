@@ -725,6 +725,8 @@ const SidebarTradeHistory = ({
   userCurrency: string,
   markets: any
 }) => {
+  const { language } = useI18n();
+  const { t } = useTranslation(language || 'en');
   const trades = sidebarTab === 'trades' ? activeTrades : userTrades;
   
   return (
@@ -735,7 +737,7 @@ const SidebarTradeHistory = ({
           onClick={() => setSidebarTab('trades')}
           className={`flex-1 py-3 text-[13px] font-bold transition-all relative flex items-center justify-center gap-2 ${sidebarTab === 'trades' ? 'text-white' : 'text-gray-500 hover:text-gray-400'}`}
         >
-          Trades
+          {t('trades')}
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${sidebarTab === 'trades' ? 'bg-[#3ea6ff] text-white' : 'bg-gray-800 text-gray-500'}`}>
             {activeTrades.length}
           </span>
@@ -746,7 +748,7 @@ const SidebarTradeHistory = ({
           className={`flex-1 py-3 text-[13px] font-bold transition-all relative flex items-center justify-center gap-2 ${sidebarTab === 'history' ? 'text-white' : 'text-gray-500 hover:text-gray-400'}`}
         >
           <Clock size={14} />
-          <span>Closed</span>
+          <span>{t('closedTrades')}</span>
           {sidebarTab === 'history' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#3ea6ff]" />}
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${sidebarTab === 'history' ? 'bg-[#3ea6ff] text-white' : 'bg-gray-800 text-gray-500'}`}>
             {userTrades.length}
@@ -1760,44 +1762,7 @@ export default function TradeTerminal() {
         });
         unsubs.push(unsubUser);
 
-        // Trades - Use REST as primary since we use SQLite
-        const fetchTrades = async (retries = 3) => {
-            if (!user?.uid) return;
-            try {
-                const res = await fetch(`/api/user-trades?userId=${user.uid}`);
-                if (res.ok) {
-                    const resJson = await res.json().catch(() => ({}));
-                    if (resJson.success && resJson.trades) {
-                        const trades = resJson.trades;
-                        const open = trades.filter((t: any) => t.status === 'open');
-                        const closed = trades.filter((t: any) => t.status !== 'open');
-                        
-                        setActiveTrades(prev => {
-                            const serverOpen = open.map((t: any) => {
-                                const exp = t.expiryTime ? (t.expiryTime * 1000) : (t.expirationTime || Date.now());
-                                return { ...t, timeLeft: Math.max(0, Math.floor((exp - Date.now()) / 1000)) };
-                            });
-                            
-                            // Keep trades that are already local but not in server response (e.g. still pending on client)
-                            const localStillOpen = prev.filter(p => !serverOpen.find(s => s.id === p.id));
-                            return [...serverOpen, ...localStillOpen];
-                        });
-                        setUserTrades(closed);
-                        try {
-                          localStorage.setItem('bivaax_trades_cache', JSON.stringify(closed.slice(0, 50)));
-                        } catch (e) {}
-                    }
-                } else if (retries > 0) {
-                    setTimeout(() => fetchTrades(retries - 1), 1500);
-                }
-            } catch (err) {
-                console.error("Trades initial fetch failed:", err);
-                if (retries > 0) {
-                    setTimeout(() => fetchTrades(retries - 1), 2000);
-                }
-            }
-        };
-        fetchTrades();
+
 
         // Optional: Keep Firestore for real-time legacy sync if needed, but don't let it overwrite REST
         const unsubOpenTrades = onSnapshot(query(collection(db, 'trades'), where('userId', '==', user.uid), where('status', '==', 'open')), (snapshot) => {
@@ -1886,6 +1851,46 @@ export default function TradeTerminal() {
     };
   }, []);
 
+  const fetchTrades = useCallback(async (retries = 3) => {
+    if (!auth.currentUser?.uid) return;
+    try {
+        const res = await fetch(`/api/user-trades?userId=${auth.currentUser.uid}`);
+        if (res.ok) {
+            const resJson = await res.json().catch(() => ({}));
+            if (resJson.success && resJson.trades) {
+                const trades = resJson.trades;
+                const open = trades.filter((t: any) => t.status === 'open');
+                const closed = trades.filter((t: any) => t.status !== 'open');
+                
+                setActiveTrades(prev => {
+                    const serverOpen = open.map((t: any) => {
+                        const exp = t.expiryTime ? (t.expiryTime * 1000) : (t.expirationTime || Date.now());
+                        return { ...t, timeLeft: Math.max(0, Math.floor((exp - Date.now()) / 1000)) };
+                    });
+                    
+                    // Keep trades that are already local but not in server response (e.g. still pending on client)
+                    const localStillOpen = prev.filter(p => !serverOpen.find(s => s.id === p.id));
+                    return [...serverOpen, ...localStillOpen];
+                });
+                setUserTrades(closed);
+                try {
+                    localStorage.setItem('bivaax_trades_cache', JSON.stringify(closed.slice(0, 50)));
+                } catch (e) {}
+            }
+        } else if (retries > 0) {
+            setTimeout(() => fetchTrades(retries - 1), 1500);
+        }
+    } catch (err) {
+        console.error("Trades initial fetch failed:", err);
+        if (retries > 0) {
+            setTimeout(() => fetchTrades(retries - 1), 2000);
+        }
+    }
+  }, [auth.currentUser?.uid]);
+
+  useEffect(() => {
+    fetchTrades();
+  }, [fetchTrades]);
   useEffect(() => {
     if (!selectedTicket || !auth.currentUser) {
       setTicketMessages(prev => prev.length === 0 ? prev : []);
@@ -2519,7 +2524,7 @@ const PROMOTED_ARTICLES = [
     }
   }, [language]);
 
-  const { t } = useTranslation((selectedLanguage?.code || 'en') as LanguageCode);
+  const { t } = useTranslation((language || selectedLanguage?.code || 'en') as LanguageCode);
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
   const [selectedCountry, setSelectedCountry] = useState("Bangladesh");
@@ -7493,7 +7498,7 @@ const PROMOTED_ARTICLES = [
             
                 {/* Vertical Text - Subdued, non-uppercase style */}
                 <div className="absolute top-[105px] left-[15px] whitespace-nowrap rotate-90 text-[11px] font-medium text-white/50 tracking-tight origin-top-left">
-                   Time remaining
+                   {t('timeRemaining')}
                 </div>
 
                 {/* The Vertical Purchase Line */}
@@ -7813,7 +7818,7 @@ const PROMOTED_ARTICLES = [
           {/* Amount Input */}
           <div className="flex flex-col gap-2">
             <div className="bg-[#2d2f36] rounded-[14px] p-1 flex flex-col items-center justify-center relative group border border-white/5 hover:border-white/10 transition-all shadow-inner h-[60px]">
-              <span className="text-[12px] text-gray-500 font-bold mb-0.5">Amount</span>
+              <span className="text-[12px] text-gray-500 font-bold mb-0.5">{t('amount')}</span>
               <div className="flex items-center justify-between w-full px-1">
                 <button 
                   onClick={() => setAmount(Math.max(minConvertedAmount, amount - (['USD', 'USDT', 'EUR', 'GBP'].includes(userCurrency) ? 1 : 10)))} 
@@ -7851,7 +7856,7 @@ const PROMOTED_ARTICLES = [
           {/* Time Input */}
           <div className="flex flex-col gap-2">
             <div onClick={() => setShowTimePicker(true)} className="bg-[#2d2f36] rounded-[14px] p-1 flex flex-col items-center justify-center relative group border border-white/5 hover:border-white/10 transition-all shadow-inner h-[60px] cursor-pointer">
-              <span className="text-[12px] text-gray-500 font-bold mb-0.5">Time</span>
+              <span className="text-[12px] text-gray-500 font-bold mb-0.5">{t('time')}</span>
               <div className="flex items-center justify-between w-full px-1">
                 <button 
                   onClick={(e) => { e.stopPropagation(); decreaseTime(); }} 
@@ -7875,7 +7880,7 @@ const PROMOTED_ARTICLES = [
           {/* Earnings Info */}
           <div className="flex items-center justify-between py-1 px-1">
             <div className="flex items-center gap-2">
-              <span className="text-[#8e9297] text-[15px] font-medium">Earnings</span>
+              <span className="text-[#8e9297] text-[15px] font-medium">{t('earnings')}</span>
               <span className="text-[#00c980] text-[15px] font-bold">+80%</span>
             </div>
             <div className="text-white font-bold text-[18px] tracking-tight">
@@ -7886,7 +7891,7 @@ const PROMOTED_ARTICLES = [
 
           {/* Majority Opinion Section */}
           <div className="flex flex-col gap-3 py-1 px-1">
-            <span className="text-[#8e9297] text-[15px] font-medium">Majority opinion</span>
+            <span className="text-[#8e9297] text-[15px] font-medium">{t('majorityOpinion')}</span>
             <div className="flex flex-col gap-2">
               {(() => {
                 const market = markets[activeAsset];
@@ -8005,16 +8010,16 @@ const PROMOTED_ARTICLES = [
         
         <div className="flex-1 flex flex-col py-6 gap-[28px] px-0 overflow-y-auto scrollbar-hide items-center">
           {[
-            { icon: Icons.LayoutGrid, label: "Activities", tab: "activities" },
-            { icon: Clock, label: "History", tab: "history" },
-            { icon: Icons.ShoppingBag, label: "Market", tab: "market" },
-            { icon: Icons.Users, label: "Copy", tab: "copytrading" },
-            { icon: Icons.Trophy, label: "Tourney", tab: "tournaments" },
+            { icon: Icons.LayoutGrid, label: t('activities'), tab: "activities" },
+            { icon: Clock, label: t('history'), tab: "history" },
+            { icon: Icons.ShoppingBag, label: t('market'), tab: "market" },
+            { icon: Icons.Users, label: t('copy'), tab: "copytrading" },
+            { icon: Icons.Trophy, label: t('tournaments'), tab: "tournaments" },
           ].map((item, idx) => {
             const isActive = activeTab === item.tab || (item.tab === 'history' && activeTab === 'trade');
             return (
             <button
-              key={`desktop-sidebar-${item.label}`}
+              key={`desktop-sidebar-${idx}`}
               onClick={() => {
                 if ('onClick' in item && typeof item.onClick === 'function') {
                   item.onClick();
@@ -8045,7 +8050,7 @@ const PROMOTED_ARTICLES = [
            >
              <Icons.MessageCircle size={22} />
              <div className="absolute left-full ml-4 px-2 py-1 bg-[#1f2026] text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-xl border border-white/5">
-                Support
+                {t('support')}
              </div>
            </button>
         </div>
@@ -8120,7 +8125,7 @@ const PROMOTED_ARTICLES = [
               >
                 <div className="flex items-center gap-1.5 mb-0.5 opacity-90 group-active:opacity-70 transition-opacity">
                     <span className={`text-[13px] font-medium leading-none ${accountType === 'demo' ? 'text-cyan-400' : accountType === 'tournament' ? 'text-indigo-400' : 'text-yellow-400'}`}>
-                      {accountType === 'demo' ? 'Demo account' : accountType === 'tournament' ? 'Tournament' : 'Real account'}
+                      {accountType === 'demo' ? t('demoAccount') : accountType === 'tournament' ? t('tournament') : t('liveAccount')}
                     </span>
                   <Icons.ChevronDown size={14} className="text-[#e0e0e0]" />
                 </div>
@@ -8146,7 +8151,7 @@ const PROMOTED_ARTICLES = [
                >
                  <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="text-[12px] font-medium text-gray-300">
-                      {accountType === 'demo' ? 'Demo account' : accountType === 'tournament' ? 'Tournament' : 'Real account'}
+                      {accountType === 'demo' ? t('demoAccount') : accountType === 'tournament' ? t('tournament') : t('liveAccount')}
                     </span>
                     <Icons.ChevronDown size={14} className="text-gray-500 group-hover:text-white transition-colors" />
                  </div>
@@ -8160,7 +8165,7 @@ const PROMOTED_ARTICLES = [
                  className="bg-[#ffe24c] hover:bg-[#fff080] text-[#131417] h-[36px] px-4 rounded-[10px] font-black text-[13px] flex items-center gap-2 transition-all active:scale-95 shadow-lg"
                >
                  <Icons.Wallet size={18} fill="currentColor" className="opacity-80" />
-                 Deposit
+                 {t('deposit')}
                </button>
 
                <button 
@@ -8168,7 +8173,7 @@ const PROMOTED_ARTICLES = [
                  className="bg-[#2a2c31] hover:bg-[#32343a] text-white h-[36px] px-4 rounded-[10px] font-black text-[13px] flex items-center gap-2 transition-all active:scale-95 border border-white/5"
                >
                  <Icons.CreditCard size={18} className="text-gray-400" />
-                 Withdraw
+                 {t('withdrawal')}
                </button>
                
                <div 
@@ -8266,7 +8271,7 @@ const PROMOTED_ARTICLES = [
                   <div onClick={() => setShowTimePicker(true)} className="flex-1 bg-[#33353b] h-[44px] rounded-lg flex items-center justify-between px-3 cursor-pointer">
                       <button onClick={(e) => { e.stopPropagation(); decreaseTime(); }} className="text-[#9ea0a5] active:scale-95 transition-transform"><Minus size={18} strokeWidth={1.5} /></button>
                       <div className="flex flex-col items-center">
-                          <span className="text-[10px] text-[#9ea0a5] tracking-wide mb-[1px]">Time</span>
+                          <span className="text-[10px] text-[#9ea0a5] tracking-wide mb-[1px]">{t('time')}</span>
                           <div className="flex flex-col items-center">
                             <span className="font-sans font-bold text-[14px] tracking-tight text-white leading-none">{expirationString}</span>
                             <span className={`text-[8px] font-bold ${timeToPurchase < 10 ? 'text-red-500' : 'text-gray-400'}`}>
@@ -8279,7 +8284,7 @@ const PROMOTED_ARTICLES = [
                   <div className="flex-1 bg-[#33353b] h-[44px] rounded-lg flex items-center justify-between px-3">
                       <button onClick={() => setAmount(Math.max(convertFromBase(minBaseAmount, userCurrency), amount - (['USD', 'USDT', 'EUR', 'GBP'].includes(userCurrency) ? 1 : 10)))} className="text-[#9ea0a5] active:scale-95 transition-transform"><Minus size={18} strokeWidth={1.5} /></button>
                       <div className="flex flex-col items-center justify-center h-full">
-                          <span className="text-[8px] text-[#9ea0a5] tracking-wide leading-none mb-[2px]">{t('amount')} (Bal: {formatWithCurrency(balance, userCurrency)})</span>
+                          <span className="text-[8px] text-[#9ea0a5] tracking-wide leading-none mb-[2px]">{t('amount')} ({t('balance')}: {formatWithCurrency(balance, userCurrency)})</span>
                           <input 
                             type="number" 
                             value={amount || ''} 
@@ -16692,22 +16697,22 @@ const PROMOTED_ARTICLES = [
                           <Icons.BadgePercent size={40} className="text-[#FFDE4D] drop-shadow-[0_0_10px_rgba(255,222,77,0.8)]" />
                       </div>
                   </div>
-                  <h2 className="text-[26px] font-bold text-white mb-1 z-10 drop-shadow-lg">Success Showcase</h2>
-                  <p className="text-[#a6aeb9] text-[15px] font-medium text-center mb-8 z-10">The biggest share of successful trades</p>
+                  <h2 className="text-[32px] font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 mb-2 z-10 drop-shadow-sm tracking-tight">Success Showcase</h2>
+                  <p className="text-gray-400 text-[16px] font-medium text-center mb-10 z-10">Celebrating the Top Traders</p>
 
-                  <div className="w-full bg-[#292A30]/80 backdrop-blur-md rounded-[24px] p-6 shadow-2xl flex flex-col gap-6 z-10 border border-white/5">
+                  <div className="w-full bg-[#1e1e23]/60 backdrop-blur-xl rounded-[32px] p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col gap-8 z-10 border border-white/10">
                       {[
-                        { flag: "🇨🇴", account: "166803***", val: "90%" },
-                        { flag: "🇮🇩", account: "177132***", val: "86%" },
-                        { flag: "🇮🇩", account: "182629***", val: "83%" }
+                        { flag: "🇨🇴", account: "166803***", val: "90%", color: "from-yellow-400 to-yellow-600" },
+                        { flag: "🇮🇩", account: "177132***", val: "86%", color: "from-gray-300 to-gray-500" },
+                        { flag: "🇮🇩", account: "182629***", val: "83%", color: "from-orange-600 to-orange-800" }
                       ].map((item, i) => (
-                          <div key={i} className="flex items-center justify-between">
-                             <div className="flex items-center gap-4">
-                               <div className="w-[24px] h-[24px] rounded-md bg-[#FFE24C] text-black font-black flex items-center justify-center text-[12px]">{i+1}</div>
-                               <span className="text-[22px]">{item.flag}</span>
-                               <span className="text-white font-medium text-[15px] tracking-wide">{item.account}</span>
+                          <div key={i} className="flex items-center justify-between group">
+                             <div className="flex items-center gap-5">
+                               <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${item.color} text-white font-bold flex items-center justify-center text-[16px] shadow-lg`}>{i+1}</div>
+                               <span className="text-[28px] drop-shadow-md">{item.flag}</span>
+                               <span className="text-gray-200 font-semibold text-[17px] tracking-wider">{item.account}</span>
                              </div>
-                             <span className="text-white font-bold text-[18px]">{item.val}</span>
+                             <span className="text-white font-black text-[20px] bg-white/5 px-4 py-2 rounded-full">{item.val}</span>
                           </div>
                       ))}
                   </div>

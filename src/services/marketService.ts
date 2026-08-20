@@ -102,24 +102,20 @@ async function flushCandleBuffer() {
     }
 
     const batch = candleBuffer.splice(0, 1000);
-    const runTx = db.transaction((rows) => {
-      for (const r of rows) {
-        insertCandleStmt.run(
-          r.pair,
-          r.type,
-          r.timeframe,
-          r.open,
-          r.high,
-          r.low,
-          r.close,
-          r.volume,
-          r.openTime,
-          r.closeTime
-        );
-      }
-    });
-    
-    runTx(batch);
+    for (const r of batch) {
+      insertCandleStmt.run(
+        r.pair,
+        r.type,
+        r.timeframe,
+        r.open,
+        r.high,
+        r.low,
+        r.close,
+        r.volume,
+        r.openTime,
+        r.closeTime
+      );
+    }
   } catch (err) {
     console.error('Failed to flush candle buffer:', err);
   } finally {

@@ -104,22 +104,32 @@ export async function sendEmail(to: string, subject: string, html: string, text?
     let smtpUser = "";
     let smtpPass = "";
 
-    if (dbConfig.smtpHost) {
+    if (dbConfig.smtpHost && dbConfig.smtpUser && dbConfig.smtpPass) {
       smtpHost = dbConfig.smtpHost;
       smtpPort = Number(dbConfig.smtpPort) || 587;
       smtpUser = dbConfig.smtpUser || "";
       smtpPass = dbConfig.smtpPass || "";
-    } else if (process.env.SMTP_HOST) {
+    } else if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
       smtpHost = process.env.SMTP_HOST;
       smtpPort = Number(process.env.SMTP_PORT) || 587;
       smtpUser = process.env.SMTP_USER || "";
       smtpPass = process.env.SMTP_PASS || "";
-    } else {
-      // Brevo fallback
-      smtpHost = "smtp-relay.brevo.com";
-      smtpPort = 587;
-      smtpUser = "bivaaxtrader@gmail.com";
-      smtpPass = "xsmtpsib-cb40d4386d54bad7f591fab86f4399e1bbddfadb556eb614d7a425d1006568b6-QpwLzh4XotgcuyYY";
+    }
+
+    const hasSmtpConfig = Boolean(smtpHost && smtpUser && smtpPass);
+
+    if (!hasSmtpConfig) {
+      // Clean mock mode when no external SMTP/Resend provider is configured
+      if (overrideConfig) {
+        throw new Error('SMTP configuration is missing. Please provide host, port, user and password.');
+      }
+
+      logger.info(`[Email Dispatch - Dev/Mock Mode] To: ${to} | Subject: ${subject}`);
+      const otpMatch = html.match(/\b\d{6}\b/);
+      if (otpMatch) {
+        logger.info(`[Email Dispatch] Detected OTP / Verification Code: ${otpMatch[0]}`);
+      }
+      return true;
     }
 
     const config = {
@@ -130,13 +140,6 @@ export async function sendEmail(to: string, subject: string, html: string, text?
       smtpFromEmail,
       smtpFromName
     };
-    
-    if (!config.smtpHost || !config.smtpPort || !config.smtpUser || !config.smtpPass) {
-      const errMsg = 'SMTP configuration is missing. Cannot send email to ' + to;
-      logger.warn(errMsg);
-      if (overrideConfig) throw new Error(errMsg);
-      return false;
-    }
 
     const transporter = nodemailer.createTransport({
       host: config.smtpHost,
@@ -174,7 +177,7 @@ export async function sendEmail(to: string, subject: string, html: string, text?
     return true;
   } catch (error: any) {
     if (error.responseCode === 535) {
-      logger.warn('SMTP Authentication failed (Invalid login). Falling back to mock email...');
+      logger.warn('Configured SMTP authentication failed (Invalid login). Check SMTP settings in Admin Panel.');
     } else {
       logger.error('Error sending email:', error.message || error);
     }
@@ -183,22 +186,10 @@ export async function sendEmail(to: string, subject: string, html: string, text?
       throw error;
     }
 
-    console.log("\n======================================================================");
-    console.log("📢 RESILIENCY FALLBACK: EMAIL TRANSIT FAILED BUT LOGGED TO CONSOLE");
-    console.log("----------------------------------------------------------------------");
-    console.log(`TO      : ${to}`);
-    console.log(`SUBJECT : ${subject}`);
-    console.log("----------------------------------------------------------------------");
-    
     const otpMatch = html.match(/\b\d{6}\b/);
     if (otpMatch) {
-      console.log(`🔑 DETECTED OTP / SECURITY CODE: ${otpMatch[0]}`);
+      logger.info(`[Email Resiliency] Fallback OTP / Security Code for ${to}: ${otpMatch[0]}`);
     }
-    
-    console.log("BODY EXCERPT:");
-    const cleanText = text || html.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
-    console.log(cleanText.substring(0, 400) + (cleanText.length > 400 ? "..." : ""));
-    console.log("======================================================================\n");
 
     return true;
   }

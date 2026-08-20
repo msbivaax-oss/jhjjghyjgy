@@ -19,6 +19,8 @@ import QRCode from 'qrcode';
 import { currencies, formatWithCurrency, formatCurrencyOnly } from '../lib/currencies';
 import { TimeZoneModal } from '../components/TimeZoneModal';
 
+import { profileTranslations } from '../lib/profileTranslations';
+
 // Unique 9-digit trade ID generated from user UID
 const getNumericId = (uid: string) => {
   let hash = 0;
@@ -32,169 +34,10 @@ const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine State", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
 ];
 
-const profileTranslations: Record<string, any> = {
-  en: {
-    back: "Back",
-    profile: "Profile",
-    accountDetails: "Account Details",
-    inviteFriends: "Invite Friends",
-    transactions: "Transactions",
-    id: "ID",
-    yourStatus: "Your status",
-    achievements: "Achievements",
-    levels: "Levels",
-    bronzeKey: "Bronze Key",
-    personalData: "Personal data",
-    firstName: "First name",
-    lastName: "Last name",
-    gender: "Gender",
-    dob: "Date of birth",
-    day: "Day",
-    month: "Month",
-    year: "Year",
-    email: "Email",
-    tfa: "Two-factor authentication (2FA)",
-    newsNotifications: "News and notifications",
-    depositCountry: "Deposit country",
-    linkSocial: "Link social account",
-    platformLanguage: "Platform language",
-    timezone: "Timezone",
-    currency: "Account Currency",
-    nickname: "Nickname",
-    kyc: "KYC Identity Check",
-    kycComplete: "Verification Complete",
-    kycProgress: "Review In Progress",
-    kycStep1: "1. Select Document Type",
-    kycStep2: "2. Launch Document Scanner",
-    kycScanning: "Scanning Document",
-    txHistory: "Transaction History",
-    noTxs: "No transactions yet",
-    save: "Save Details",
-    searchCountry: "Search country...",
-    loading: "Loading...",
-    placeholderFirstName: "Enter first name",
-    placeholderLastName: "Enter last name",
-    placeholderNickname: "Enter a cool nickname",
-    genderMale: "Male",
-    genderFemale: "Female",
-    genderOther: "Other",
-    logout: "Logout",
-    verifyIdCard: "ID Card",
-    verifyPassport: "Passport",
-    verifyDriverLicense: "Driver's License",
-    verifyAadhaar: "Aadhaar / National Card",
-    verifyLaunchScanner: "Launch Document Scanner",
-    verifyScanning: "Scanning Document",
-    verifyVerifyNow: "Verify Now",
-    verifyUploading: "Processing and transmitting...",
-    title: "Account Details",
-    statusPremium: "Premium Star",
-    statusStandard: "Standard",
-    showLess: "Show less",
-    showAll: "Show all",
-    learnMore: "Learn more",
-    manage: "Manage",
-    receiveNewsletter: "Receive newsletter and promotions",
-    allowNotifications: "Allow notifications and informational messages",
-    autoDetected: "Auto-detected",
-    socialConnected: "Connected as",
-    socialNotConnected: "Not connected",
-    chooseCurrency: "Choose your primary display account currency",
-    confirmCurrencyChange: "Confirm Currency Change",
-    kycInstructions: "Your identity is verified. Standard limitations have been cleared.",
-    kycInstructionsProgress: "Manual security verification is checking your credentials. This takes up to 24 hours.",
-    goBack: "Go Back",
-    saving: "Saving...",
-    saveBtn: "Save",
-    on: "On",
-    off: "Off",
-    tfaInstructions: "Protect your account and funds from illegal access. Get a proven authentication method in addition to your password.",
-    recoveryCodes: "Recovery codes"
-  },
-  bn: {
-    back: "Back",
-    profile: "Profile",
-    accountDetails: "Account Details",
-    inviteFriends: "Invite Friends",
-    transactions: "Transactions",
-    id: "ID",
-    yourStatus: "Your status",
-    achievements: "Achievements",
-    levels: "Levels",
-    bronzeKey: "Bronze Key",
-    personalData: "Personal data",
-    firstName: "First name",
-    lastName: "Last name",
-    gender: "Gender",
-    dob: "Date of birth",
-    day: "Day",
-    month: "Month",
-    year: "Year",
-    email: "Email",
-    tfa: "Two-factor authentication (2FA)",
-    newsNotifications: "News and notifications",
-    depositCountry: "Deposit country",
-    linkSocial: "Link social account",
-    platformLanguage: "Platform language",
-    timezone: "Timezone",
-    currency: "Account Currency",
-    nickname: "Nickname",
-    kyc: "KYC Identity Check",
-    kycComplete: "Verification Complete",
-    kycProgress: "Review In Progress",
-    kycStep1: "1. Select Document Type",
-    kycStep2: "2. Launch Document Scanner",
-    kycScanning: "Scanning Document",
-    txHistory: "Transaction History",
-    noTxs: "No transactions yet",
-    save: "Save Details",
-    searchCountry: "Search country...",
-    loading: "Loading...",
-    placeholderFirstName: "Enter first name",
-    placeholderLastName: "Enter last name",
-    placeholderNickname: "Enter a cool nickname",
-    genderMale: "Male",
-    genderFemale: "Female",
-    genderOther: "Other",
-    logout: "Logout",
-    verifyIdCard: "ID Card",
-    verifyPassport: "Passport",
-    verifyDriverLicense: "Driver's License",
-    verifyAadhaar: "Aadhaar / National Card",
-    verifyLaunchScanner: "Launch Document Scanner",
-    verifyScanning: "Scanning Document",
-    verifyVerifyNow: "Verify Now",
-    verifyUploading: "Processing and transmitting...",
-    title: "Account Details",
-    statusPremium: "Premium Star",
-    statusStandard: "Standard",
-    showLess: "Show less",
-    showAll: "Show all",
-    learnMore: "Learn more",
-    manage: "Manage",
-    receiveNewsletter: "Receive newsletter and promotions",
-    allowNotifications: "Allow notifications and informational messages",
-    autoDetected: "Auto-detected",
-    socialConnected: "Connected as",
-    socialNotConnected: "Not connected",
-    chooseCurrency: "Choose your primary display account currency",
-    confirmCurrencyChange: "Confirm Currency Change",
-    kycInstructions: "আপনার পরিচয় যাচাই করা হয়েছে। সাধারণ সীমাবদ্ধতাগুলো তুলে নেওয়া হয়েছে।",
-    kycInstructionsProgress: "ম্যানুয়াল নিরাপত্তা যাচাইকরণ আপনার পরিচয়পত্র যাচাই করছে। এতে ২৪ ঘণ্টা পর্যন্ত সময় লাগতে পারে।",
-    goBack: "Go Back",
-    saving: "Saving...",
-    saveBtn: "Save",
-    on: "On",
-    off: "Off",
-    tfaInstructions: "Protect your account and funds from illegal access. Get a proven authentication method in addition to your password.",
-    recoveryCodes: "Recovery codes"
-  }
-};
-
 export default function ProfilePage() {
   const { language, setLanguage } = useI18n();
   const activeLang = profileTranslations[language] ? language : 'en';
-  const tr = profileTranslations[activeLang];
+  const tr = profileTranslations[activeLang] || profileTranslations.en;
   useTitle(tr.title);
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
@@ -654,9 +497,9 @@ export default function ProfilePage() {
             className="p-1.5 hover:bg-gray-50 rounded-xl text-gray-700 active:scale-95 transition-all flex items-center gap-1.5 font-bold text-sm"
           >
             <ArrowLeft size={18} className="stroke-[2.5]" />
-            Back
+            {tr.back || "Back"}
           </button>
-          <span className="text-base font-black text-gray-900 tracking-tight">Profile</span>
+          <span className="text-base font-black text-gray-900 tracking-tight">{tr.profile || "Profile"}</span>
           <div className="w-16"></div> {/* Spacer for symmetry */}
         </div>
 
@@ -670,7 +513,7 @@ export default function ProfilePage() {
                 : 'text-gray-400 hover:text-gray-600 border-b-2 border-transparent'
             }`}
           >
-            Account Details
+            {tr.accountDetails || "Account Details"}
           </button>
           <button 
             onClick={() => { setActiveTab('invite'); navigate('/profile/invite'); setShowKycFlow(false); }} 
@@ -680,7 +523,7 @@ export default function ProfilePage() {
                 : 'text-gray-400 hover:text-gray-600 border-b-2 border-transparent'
             }`}
           >
-            Invite Friends
+            {tr.inviteFriends || "Invite Friends"}
           </button>
           <button 
             onClick={() => { setActiveTab('transactions'); navigate('/profile/transactions'); setShowKycFlow(false); }} 
@@ -690,7 +533,7 @@ export default function ProfilePage() {
                 : 'text-gray-400 hover:text-gray-600 border-b-2 border-transparent'
             }`}
           >
-            Transactions
+            {tr.transactions || "Transactions"}
           </button>
         </div>
 
@@ -729,7 +572,7 @@ export default function ProfilePage() {
                     />
                   </div>
                   <div className="text-sm font-semibold text-gray-400">
-                    ID: {getNumericId(user.uid)}
+                    {tr.id || "ID"}: {getNumericId(user.uid)}
                   </div>
 
                   {/* CUSTOM STATUS BANNER */}
@@ -749,9 +592,9 @@ export default function ProfilePage() {
                       </div>
                       <div className="text-left">
                         <h4 className="font-extrabold text-gray-900 text-lg leading-tight">
-                          {(kycStatus?.status === 'approved' || kycStatus?.status === 'verified') ? 'Premium Star' : kycStatus?.status === 'pending' ? 'In Review' : 'Standard'}
+                          {(kycStatus?.status === 'approved' || kycStatus?.status === 'verified') ? (tr.statusPremium || 'Premium Star') : kycStatus?.status === 'pending' ? (tr.kycProgress || 'In Review') : (tr.statusStandard || 'Standard')}
                         </h4>
-                        <p className="text-xs text-gray-500 font-semibold mt-0.5">Your status</p>
+                        <p className="text-xs text-gray-500 font-semibold mt-0.5">{tr.yourStatus || "Your status"}</p>
                       </div>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:bg-[#ffe24c] group-hover:text-gray-900 transition-all border border-gray-200/60 shadow-xs shrink-0">
@@ -792,7 +635,7 @@ export default function ProfilePage() {
 
                 {/* 2. ACHIEVEMENTS SYSTEM */}
                 <div className="max-w-md mx-auto">
-                  <h3 className="text-xl font-black text-gray-900 tracking-tight text-left mb-5">Achievements</h3>
+                  <h3 className="text-xl font-black text-gray-900 tracking-tight text-left mb-5">{tr.achievements || "Achievements"}</h3>
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     
                     {/* Badge 1: 2+ Double Circle */}
@@ -801,7 +644,7 @@ export default function ProfilePage() {
                         {/* 2+ custom drawing */}
                         <span className="text-medium font-black text-gray-500 tracking-tighter">2+</span>
                       </div>
-                      <span className="font-black text-gray-500 text-xs">2+ Levels</span>
+                      <span className="font-black text-gray-500 text-xs">2+ {tr.levels || "Levels"}</span>
                     </div>
 
                     {/* Badge 2: Star Padlock */}
@@ -812,7 +655,7 @@ export default function ProfilePage() {
                           <Lock size={10} className="text-gray-500" />
                         </div>
                       </div>
-                      <span className="font-semibold text-gray-400 text-xs">Bronze Key</span>
+                      <span className="font-semibold text-gray-400 text-xs">{tr.bronzeKey || "Bronze Key"}</span>
                     </div>
 
                   </div>
@@ -848,49 +691,49 @@ export default function ProfilePage() {
                     onClick={() => setShowAllAchievements(!showAllAchievements)}
                     className="w-full py-4 text-sm font-black text-gray-600 bg-[#f4f5f8] rounded-2xl hover:bg-gray-200/70 transition-all text-center border border-gray-100/40"
                   >
-                    {showAllAchievements ? 'Show less' : 'Show all'}
+                    {showAllAchievements ? (tr.showLess || 'Show less') : (tr.showAll || 'Show all')}
                   </button>
                 </div>
 
                 {/* 3. PERSONAL DATA INPUTS FORM */}
                 <div className="max-w-md mx-auto space-y-6">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight text-left">Personal data</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight text-left">{tr.personalData || "Personal data"}</h3>
                   
                   {/* First Name */}
                   <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all text-left">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">First name</label>
+                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">{tr.firstName || "First name"}</label>
                     <input 
                       type="text" 
                       value={firstName} 
                       onChange={e => setFirstName(e.target.value)}
-                      placeholder="Enter first name"
+                      placeholder={tr.placeholderFirstName || "Enter first name"}
                       className="w-full bg-transparent text-gray-900 font-extrabold focus:outline-none placeholder:text-gray-300 text-sm sm:text-base"
                     />
                   </div>
 
                   {/* Last Name */}
                   <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all text-left">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">Last name</label>
+                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">{tr.lastName || "Last name"}</label>
                     <input 
                       type="text" 
                       value={lastName} 
                       onChange={e => setLastName(e.target.value)}
-                      placeholder="Enter last name"
+                      placeholder={tr.placeholderLastName || "Enter last name"}
                       className="w-full bg-transparent text-gray-900 font-extrabold focus:outline-none placeholder:text-gray-300 text-sm sm:text-base"
                     />
                   </div>
 
                   {/* Gender dropdown */}
                   <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all text-left">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">Gender</label>
+                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">{tr.gender || "Gender"}</label>
                     <select 
                       value={gender} 
                       onChange={e => setGender(e.target.value)}
                       className="w-full bg-transparent text-gray-900 font-extrabold focus:outline-none text-sm sm:text-base appearance-none cursor-pointer"
                     >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
+                      <option value="Male">{tr.genderMale || "Male"}</option>
+                      <option value="Female">{tr.genderFemale || "Female"}</option>
+                      <option value="Other">{tr.genderOther || "Other"}</option>
                       <option value="---">---</option>
                     </select>
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
@@ -900,11 +743,11 @@ export default function ProfilePage() {
 
                   {/* Date of Birth Grid selectors */}
                   <div className="text-left space-y-2">
-                    <label className="block text-sm text-gray-500 font-semibold">Date of birth</label>
+                    <label className="block text-sm text-gray-500 font-semibold">{tr.dob || "Date of birth"}</label>
                     <div className="grid grid-cols-3 gap-3">
                       {/* Day Select */}
                       <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-3 hover:border-gray-300 transition-all">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-0.5">Day</label>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-0.5">{tr.day || "Day"}</label>
                         <select 
                           value={dobDay} 
                           onChange={e => setDobDay(e.target.value)}
@@ -922,7 +765,7 @@ export default function ProfilePage() {
 
                       {/* Month Select */}
                       <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-3 hover:border-gray-300 transition-all">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-0.5">Month</label>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-0.5">{tr.month || "Month"}</label>
                         <select 
                           value={dobMonth} 
                           onChange={e => setDobMonth(e.target.value)}
@@ -940,7 +783,7 @@ export default function ProfilePage() {
 
                       {/* Year Select */}
                       <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-3 hover:border-gray-300 transition-all">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-0.5">Year</label>
+                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-0.5">{tr.year || "Year"}</label>
                         <select 
                           value={dobYear} 
                           onChange={e => setDobYear(e.target.value)}
@@ -967,13 +810,13 @@ export default function ProfilePage() {
                     disabled={isSubmitting}
                     className="w-full py-4 text-base font-black text-gray-900 bg-[#ffe24c] hover:bg-[#ffe24c]/95 active:scale-[0.99] rounded-2.5xl transition-all shadow-md shadow-yellow-500/15 uppercase"
                   >
-                    {isSubmitting ? 'Saving...' : 'Save'}
+                    {isSubmitting ? (tr.saving || 'Saving...') : (tr.saveBtn || tr.save || 'Save')}
                   </button>
 
                   {/* Email address box */}
                   <div className="relative bg-gray-100/50 border border-gray-200/30 rounded-2xl p-4 text-left flex items-center justify-between">
                     <div>
-                      <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">Email</label>
+                      <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">{tr.email || "Email"}</label>
                       <span className="text-gray-900 font-bold block truncate max-w-xs">{user.email}</span>
                     </div>
                     {(user.isVerified || user.is_verified || user.emailVerified) ? (
@@ -1015,26 +858,26 @@ export default function ProfilePage() {
                 {/* 4. TWO FACTOR COMPONENT */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-2xl font-black text-gray-900 tracking-tight text-left">Two-factor authentication (2FA)</h3>
+                    <h3 className="text-2xl font-black text-gray-900 tracking-tight text-left">{tr.tfa || "Two-factor authentication (2FA)"}</h3>
                     {user?.tfaEnabled ? (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full border border-emerald-200 shrink-0">
-                        ✓ On
+                        ✓ {tr.on || "On"}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-500 text-[11px] font-bold rounded-full border border-gray-200 shrink-0">
-                        Off
+                        {tr.off || "Off"}
                       </span>
                     )}
                   </div>
                   
                   <p className="text-sm text-gray-500 text-left font-medium leading-relaxed">
-                    Protect your account and funds from illegal access. Get a proven authentication method in addition to your password. <span onClick={() => { setTfaStep(0); setShowTfaModal(true); }} className="text-blue-600 underline cursor-pointer hover:text-blue-800">Learn more</span>
+                    {tr.tfaInstructions || "Protect your account and funds from illegal access. Get a proven authentication method in addition to your password."} <span onClick={() => { setTfaStep(0); setShowTfaModal(true); }} className="text-blue-600 underline cursor-pointer hover:text-blue-800">{tr.learnMore || "Learn more"}</span>
                   </p>
 
                   {/* Recovery codes representation */}
                   {user?.tfaEnabled && (
                     <div className="border-2 border-dashed border-gray-200 bg-gray-50 rounded-2xl p-4 flex items-center justify-between text-left">
-                      <span className="text-sm font-extrabold text-gray-700">Recovery codes</span>
+                      <span className="text-sm font-extrabold text-gray-700">{tr.recoveryCodes || "Recovery codes"}</span>
                       <span className="text-sm font-bold text-gray-600 font-mono">10/10</span>
                     </div>
                   )}
@@ -1052,13 +895,13 @@ export default function ProfilePage() {
                     }}
                     className="w-full py-4 text-base font-black text-gray-900 bg-[#ffe24c] hover:bg-[#ffe24c]/95 rounded-2.5xl transition-all uppercase"
                   >
-                    Manage
+                    {tr.manage || "Manage"}
                   </button>
                 </div>
 
                 {/* 5. NEWS AND NOTIFICATIONS STYLE MATCH SCREEN 4 */}
                 <div className="max-w-md mx-auto space-y-6 pt-4 border-t border-gray-100">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight text-left">News and notifications</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight text-left">{tr.newsNotifications || "News and notifications"}</h3>
                   
                   <div className="space-y-4">
                     {/* Newsletter Check */}
@@ -1076,7 +919,7 @@ export default function ProfilePage() {
                         {emailNewsletter && <Check size={14} className="stroke-[3]" />}
                       </div>
                       <span className="text-sm sm:text-base text-gray-700 font-bold group-hover:text-gray-900 transition-colors">
-                        Receive newsletter and promotions
+                        {tr.receiveNewsletter || "Receive newsletter and promotions"}
                       </span>
                     </div>
 
@@ -1095,7 +938,7 @@ export default function ProfilePage() {
                         {allowNotifications && <Check size={14} className="stroke-[3]" />}
                       </div>
                       <span className="text-sm sm:text-base text-gray-700 font-bold group-hover:text-gray-900 transition-colors">
-                        Allow notifications and informational messages
+                        {tr.allowNotifications || "Allow notifications and informational messages"}
                       </span>
                     </div>
                   </div>
@@ -1104,9 +947,9 @@ export default function ProfilePage() {
                 {/* 6. DEPOSIT COUNTRY SELECTION (SECURED & AUTO-DETECTED) */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100 text-left">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-2xl font-black text-gray-900 tracking-tight">Deposit country</h3>
+                    <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.depositCountry || "Deposit country"}</h3>
                     <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
-                      <CheckCircle2 size={12} className="stroke-[3]" /> Auto-detected
+                      <CheckCircle2 size={12} className="stroke-[3]" /> {tr.autoDetected || "Auto-detected"}
                     </span>
                   </div>
                   <div 
@@ -1121,7 +964,7 @@ export default function ProfilePage() {
 
                 {/* 7. LINK SOCIAL ACCOUNT BLOCK (FACEBOOK / GOOGLE) */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100 text-left">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">Link social account</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.linkSocial || "Link social account"}</h3>
                   <div className="flex gap-4">
                     
                     {/* FB Button */}
@@ -1150,7 +993,7 @@ export default function ProfilePage() {
 
                 {/* 8. PLATFORM LANGUAGE SELECT BOX */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100 text-left">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">Platform language</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.platformLanguage || "Platform language"}</h3>
                   <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all">
                     
                     <div className="flex items-center gap-3">
@@ -1209,7 +1052,7 @@ export default function ProfilePage() {
 
                 {/* 9. TIMEZONE SELECT BOX */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100 text-left">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">Timezone</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.timezone || "Timezone"}</h3>
                   <button 
                     onClick={() => setShowTimeZoneModal(true)}
                     className="w-full relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all flex items-center justify-between group"
@@ -1237,7 +1080,7 @@ export default function ProfilePage() {
 
                 {/* 10. CURRENCY SELECT BOX */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100 text-left">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">Account Currency</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.currency || "Account Currency"}</h3>
                   <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all">
                     
                     <div className="flex items-center gap-3">
@@ -1280,13 +1123,13 @@ export default function ProfilePage() {
 
                 {/* 11. NICKNAME INPUT CARD */}
                 <div className="max-w-md mx-auto space-y-4 pt-4 border-t border-gray-100 text-left">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">Nickname</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.nickname || "Nickname"}</h3>
                   <div className="relative bg-[#f4f5f8] border border-gray-200/20 rounded-2xl p-4 hover:border-gray-300 transition-all text-left">
                     <input 
                       type="text" 
                       value={nickname} 
                       onChange={e => setNickname(e.target.value)}
-                      placeholder="Enter a cool nickname"
+                      placeholder={tr.placeholderNickname || "Enter a cool nickname"}
                       className="w-full bg-transparent text-gray-900 font-extrabold focus:outline-none placeholder:text-gray-300 text-sm sm:text-base"
                     />
                   </div>
@@ -1314,7 +1157,7 @@ export default function ProfilePage() {
                     className="px-8 py-4 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-2xl text-xs font-black uppercase tracking-widest transition-all inline-flex items-center gap-2 border border-rose-100"
                   >
                     <LogOut size={16} />
-                    Logout secure session
+                    {tr.logout || "Logout"}
                   </button>
                 </div>
 
@@ -1331,7 +1174,7 @@ export default function ProfilePage() {
                 className="max-w-md mx-auto space-y-8"
               >
                 <div className="flex items-center justify-between border-b pb-4">
-                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">KYC Identity Check</h3>
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.kyc || "KYC Identity Check"}</h3>
                   <button 
                     onClick={() => setShowKycFlow(false)} 
                     className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 font-bold transition-all"
@@ -1352,30 +1195,30 @@ export default function ProfilePage() {
                     <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto">
                       <ShieldCheck size={36} />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900">Verification Complete</h3>
-                    <p className="text-gray-500 text-sm max-w-xs mx-auto px-4">Your digital node is fully verified. Standard limitations have been cleared.</p>
+                    <h3 className="text-xl font-bold text-gray-900">{tr.kycComplete || "Verification Complete"}</h3>
+                    <p className="text-gray-500 text-sm max-w-xs mx-auto px-4">{tr.kycInstructions || "Your digital node is fully verified. Standard limitations have been cleared."}</p>
                   </div>
                 ) : kycStatus?.status === 'pending' ? (
                   <div className="text-center py-12 space-y-4 bg-yellow-50 rounded-3xl border border-yellow-100">
                     <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600 mx-auto">
                       <Clock size={36} />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900">Review In Progress</h3>
-                    <p className="text-gray-500 text-sm max-w-xs mx-auto px-4">Our compliance team is verifying your documents. This usually takes up to 24 hours.</p>
+                    <h3 className="text-xl font-bold text-gray-900">{tr.kycProgress || "Review In Progress"}</h3>
+                    <p className="text-gray-500 text-sm max-w-xs mx-auto px-4">{tr.kycInstructionsProgress || "Our compliance team is verifying your documents. This usually takes up to 24 hours."}</p>
                   </div>
                 ) : (
                   <div className="space-y-6">
                     {currentKycStep === 0 && (
                         <div className="space-y-4">
-                            <h4 className="font-bold text-gray-900">Personal Information</h4>
-                            <input type="text" placeholder="First Name" className="w-full bg-gray-50 p-4 rounded-xl" value={kycData.firstName} onChange={e => setKycData({...kycData, firstName: e.target.value})} />
-                            <input type="text" placeholder="Last Name" className="w-full bg-gray-50 p-4 rounded-xl" value={kycData.lastName} onChange={e => setKycData({...kycData, lastName: e.target.value})} />
+                            <h4 className="font-bold text-gray-900">{tr.personalData || "Personal Information"}</h4>
+                            <input type="text" placeholder={tr.firstName || "First Name"} className="w-full bg-gray-50 p-4 rounded-xl" value={kycData.firstName} onChange={e => setKycData({...kycData, firstName: e.target.value})} />
+                            <input type="text" placeholder={tr.lastName || "Last Name"} className="w-full bg-gray-50 p-4 rounded-xl" value={kycData.lastName} onChange={e => setKycData({...kycData, lastName: e.target.value})} />
                             <button onClick={() => setCurrentKycStep(1)} className="w-full bg-gray-900 text-white p-4 rounded-xl font-bold">Next</button>
                         </div>
                     )}
                     {currentKycStep === 1 && (
                         <div className="space-y-4">
-                            <h4 className="font-bold text-gray-900">Document Type Selection</h4>
+                            <h4 className="font-bold text-gray-900">{tr.kycStep1 || "Document Type Selection"}</h4>
                             <div className="grid grid-cols-3 gap-3">
                                 {['NID', 'Passport', 'License'].map((t) => (
                                     <button 
@@ -1385,31 +1228,31 @@ export default function ProfilePage() {
                                         kycData.idType === t ? 'bg-gray-900 text-white border-gray-900' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100/50'
                                         }`}
                                     >
-                                        {t}
+                                        {t === 'NID' ? (tr.verifyAadhaar || 'NID') : t === 'Passport' ? (tr.verifyPassport || 'Passport') : (tr.verifyDriverLicense || 'License')}
                                     </button>
                                 ))}
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={() => setCurrentKycStep(0)} className="flex-1 bg-gray-200 p-4 rounded-xl font-bold">Back</button>
+                                <button onClick={() => setCurrentKycStep(0)} className="flex-1 bg-gray-200 p-4 rounded-xl font-bold">{tr.back || "Back"}</button>
                                 <button onClick={() => setCurrentKycStep(2)} className="flex-1 bg-gray-900 text-white p-4 rounded-xl font-bold">Next</button>
                             </div>
                         </div>
                     )}
                     {currentKycStep === 2 && (
                         <div className="space-y-4">
-                            <h4 className="font-bold text-gray-900">Country Selection</h4>
+                            <h4 className="font-bold text-gray-900">{tr.depositCountry || "Country Selection"}</h4>
                             <select className="w-full bg-gray-50 p-4 rounded-xl" value={kycData.country} onChange={e => setKycData({...kycData, country: e.target.value})}>
                                 {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <div className="flex gap-2">
-                                <button onClick={() => setCurrentKycStep(1)} className="flex-1 bg-gray-200 p-4 rounded-xl font-bold">Back</button>
+                                <button onClick={() => setCurrentKycStep(1)} className="flex-1 bg-gray-200 p-4 rounded-xl font-bold">{tr.back || "Back"}</button>
                                 <button onClick={() => setCurrentKycStep(3)} className="flex-1 bg-gray-900 text-white p-4 rounded-xl font-bold">Next</button>
                             </div>
                         </div>
                     )}
                     {currentKycStep === 3 && (
                         <div className="space-y-4">
-                            <h4 className="font-bold text-gray-900">Document Upload</h4>
+                            <h4 className="font-bold text-gray-900">{tr.kycStep2 || "Document Upload"}</h4>
                             <div className="grid grid-cols-2 gap-4">
                                 <div onClick={() => frontInputRef.current?.click()} className="h-32 bg-gray-50 border border-dashed rounded-xl flex items-center justify-center cursor-pointer">
                                     {kycData.idFrontUrl ? <img src={kycData.idFrontUrl} className="h-full object-cover" alt="Front" /> : 'Front Side'}
@@ -1422,9 +1265,9 @@ export default function ProfilePage() {
                             <input type="file" ref={backInputRef} className="hidden" onChange={e => handleFileChange(e, 'idBackUrl')} />
                             
                             <button onClick={handleSubmitKyc} disabled={isSubmitting} className="w-full bg-yellow-400 p-4 rounded-xl font-bold">
-                                {isSubmitting ? 'Submitting...' : 'Submit for Review'}
+                                {isSubmitting ? (tr.saving || 'Submitting...') : (tr.verifyVerifyNow || 'Submit for Review')}
                             </button>
-                            <button onClick={() => setCurrentKycStep(2)} className="w-full bg-gray-200 p-4 rounded-xl font-bold">Back</button>
+                            <button onClick={() => setCurrentKycStep(2)} className="w-full bg-gray-200 p-4 rounded-xl font-bold">{tr.back || "Back"}</button>
                         </div>
                     )}
                   </div>
@@ -1492,10 +1335,10 @@ export default function ProfilePage() {
 
                 <div className="space-y-3 text-center">
                   <h2 className="text-[25px] font-black text-gray-900 tracking-tight leading-8 max-w-[280px] mx-auto">
-                    Invite friends to Bivaax and earn together!
+                    {tr.inviteTitle || "Invite friends to Bivaax and earn together!"}
                   </h2>
                   <p className="text-gray-500 text-sm font-semibold leading-relaxed max-w-[325px] mx-auto">
-                    Attract new traders to the platform and get $10-20* for each. Your friends on Bivaax will get rewards, too
+                    {tr.inviteDesc || "Attract new traders to the platform and get $10-20* for each. Your friends on Bivaax will get rewards, too"}
                   </p>
                 </div>
 
@@ -1504,13 +1347,13 @@ export default function ProfilePage() {
                   onClick={() => navigate('/affiliate')}
                   className="w-full py-4 text-base font-black text-gray-900 bg-[#f4f5f8] hover:bg-[#ebedf1] active:bg-[#e2e5ea] active:scale-[0.99] rounded-2xl transition-all text-center border border-gray-100"
                 >
-                  How it works?
+                  {tr.howItWorks || "How it works?"}
                 </button>
 
                 {/* Referral Link copy dashbox */}
                 <div className="bg-[#f4f5f8]/40 border-2 border-dashed border-gray-200/80 rounded-2xl p-4 text-left flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <span className="block text-xs font-bold text-gray-400 mb-0.5">Your referral link</span>
+                    <span className="block text-xs font-bold text-gray-400 mb-0.5">{tr.yourReferralLink || "Your referral link"}</span>
                     <span className="text-sm font-bold text-gray-900 font-mono tracking-tight truncate block select-all">
                       {`${window.location.origin}/register?ref=${user?.referralCode || user?.uid?.slice(0, 8).toUpperCase() || 'BIVAAX'}`}
                     </span>
@@ -1519,7 +1362,7 @@ export default function ProfilePage() {
                     onClick={() => {
                       const refLink = `${window.location.origin}/register?ref=${user?.referralCode || user?.uid?.slice(0, 8).toUpperCase() || 'BIVAAX'}`;
                       navigator.clipboard.writeText(refLink);
-                      toast.success('Referral link copied!');
+                      toast.success(tr.linkCopied || 'Referral link copied!');
                     }}
                     className="p-2.5 bg-white hover:bg-gray-50 text-gray-700 rounded-xl border border-gray-200 shadow-xs transition-all active:scale-95 shrink-0"
                   >
@@ -1542,7 +1385,7 @@ export default function ProfilePage() {
                       }).catch(() => {});
                     } else {
                       navigator.clipboard.writeText(shareUrl);
-                      toast.success('Ref link copied inside sharing board!');
+                      toast.success(tr.linkCopied || 'Ref link copied!');
                     }
                   }}
                   className="w-full py-4 text-base font-black text-gray-900 bg-[#ffe24c] hover:bg-[#ffe24c]/95 active:scale-[0.995] rounded-2xl transition-all flex items-center justify-center gap-2"
@@ -1552,7 +1395,7 @@ export default function ProfilePage() {
                     <polyline points="16 6 12 2 8 6" />
                     <line x1="12" y1="2" x2="12" y2="15" />
                   </svg>
-                  Share link
+                  {tr.shareLink || "Share link"}
                 </button>
 
                 {/* Bottom link to Affiliated Program Page */}
@@ -1561,7 +1404,7 @@ export default function ProfilePage() {
                     onClick={() => navigate('/affiliate')}
                     className="text-[#3875df] hover:underline cursor-pointer font-bold text-sm tracking-wide inline-block transition-colors"
                   >
-                    Referral program rules in detail
+                    {tr.referralRules || "Referral program rules in detail"}
                   </span>
                 </div>
               </motion.div>
@@ -1576,7 +1419,7 @@ export default function ProfilePage() {
                 className="space-y-6"
               >
                 <div className="flex items-center justify-between mb-2">
-                   <h3 className="text-2xl font-black text-gray-900 tracking-tight">Transaction History</h3>
+                   <h3 className="text-2xl font-black text-gray-900 tracking-tight">{tr.txHistory || "Transaction History"}</h3>
                    <button 
                     onClick={() => setActiveTab('transactions')} 
                     className="p-2 text-gray-400 hover:text-gray-900 transition-colors"
@@ -1589,7 +1432,7 @@ export default function ProfilePage() {
                 {isFetchingTransactions ? (
                   <div className="py-20 flex flex-col items-center justify-center gap-4 text-gray-400">
                      <div className="w-8 h-8 border-4 border-gray-100 border-t-gray-400 rounded-full animate-spin" />
-                     <span className="text-xs font-bold uppercase tracking-widest">Fetching ledger data...</span>
+                     <span className="text-xs font-bold uppercase tracking-widest">{tr.loading || "Loading ledger data..."}</span>
                   </div>
                 ) : transactions.length > 0 ? (
                   <div className="space-y-3">
@@ -1603,7 +1446,7 @@ export default function ProfilePage() {
                            </div>
                            <div className="text-left">
                               <h4 className="font-extrabold text-gray-900 text-sm leading-tight flex items-center gap-2">
-                                {tx.type} {tx.method && <span className="text-[10px] font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded uppercase tracking-tighter">{tx.method}</span>}
+                                {tx.type === 'Deposit' ? (tr.deposit || 'Deposit') : (tr.withdraw || 'Withdraw')} {tx.method && <span className="text-[10px] font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded uppercase tracking-tighter">{tx.method}</span>}
                               </h4>
                               <p className="text-[10px] text-gray-400 font-bold mt-0.5">
                                 {tx.timestamp?.toDate ? tx.timestamp.toDate().toLocaleString() : new Date(tx.timestamp).toLocaleString()}
@@ -1636,8 +1479,8 @@ export default function ProfilePage() {
                       <RefreshCw size={32} />
                     </div>
                     <div className="text-center">
-                       <h4 className="text-gray-900 font-bold">No transactions yet</h4>
-                       <p className="text-xs font-semibold px-6 mt-1 leading-relaxed">Your deposit and withdrawal history will be displayed here once generated.</p>
+                       <h4 className="text-gray-900 font-bold">{tr.noTxs || "No transactions yet"}</h4>
+                       <p className="text-xs font-semibold px-6 mt-1 leading-relaxed">{tr.noTxsDesc || "Your deposit and withdrawal history will be displayed here once generated."}</p>
                     </div>
                   </div>
                 )}

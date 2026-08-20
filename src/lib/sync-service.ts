@@ -221,7 +221,7 @@ export async function authoritativeSync(userId: string, emitSocket = true) {
     if (!user) {
       // Restore basic profile
       await run(
-        `INSERT INTO users (
+        `INSERT OR IGNORE INTO users (
           uid, email, display_name, real_balance, demo_balance, 
           kyc_status, is_verified, country, referral_code, referred_by_uid,
           affiliate_balance, total_affiliate_earnings, referral_count

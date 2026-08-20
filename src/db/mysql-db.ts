@@ -1053,6 +1053,9 @@ export const db = {
     }
     return null;
   },
+  transaction<T>(fn: (client: any) => Promise<T>) {
+    return transaction(fn);
+  },
   get inTransaction() {
     return usePg ? false : Boolean(sqliteDb?.inTransaction);
   }
