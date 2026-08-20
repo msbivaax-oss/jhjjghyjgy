@@ -589,10 +589,19 @@ router.post('/api/kyc', async (req, res) => {
     }
 
     // 4. Update Firebase Admin if needed (optional since frontend can do it, but server-side is more secure)
+    try {
+      await run('UPDATE users SET kyc_status = ?, is_nid_verified = ?, nid_number = ? WHERE uid = ?', 
+        [status, (status === 'approved' || status === 'verified') ? 1 : 0, kycData.idNumber || '', userId]);
+    } catch (sqlErr: any) {
+      logger.error(`Failed to update SQL KYC status for ${userId}: ${sqlErr.message}`);
+    }
+
     if (adminDb) {
       const userRef = adminDb.collection('users').doc(userId);
       await userRef.update({
         kycStatus: status,
+        isNidVerified: status === 'approved' || status === 'verified',
+        nidNumber: kycData.idNumber || '',
         kycSubmittedAt: new Date().toISOString(),
         idType: kycData.idType,
         fullName: kycData.fullName,

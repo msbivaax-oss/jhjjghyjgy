@@ -27,7 +27,19 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "role": { "type": "string" },
-        "kyc_status": { "type": "string" }
+        "kyc_status": { "type": "string" },
+        "isEmailVerified": { "type": "boolean" },
+        "isNidVerified": { "type": "boolean" },
+        "nidNumber": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "name": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "nickname": { "type": "string" },
+        "country": { "type": "string" },
+        "gender": { "type": "string" },
+        "dob": { "type": "object" },
+        "updatedAt": { "type": "number" }
       },
       "required": ["uid", "email"]
     },

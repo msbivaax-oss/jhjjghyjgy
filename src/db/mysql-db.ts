@@ -2,11 +2,32 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import pg from 'pg';
+import dns from 'dns';
+import { promisify } from 'util';
 import logger from '../lib/logger.ts';
 import { getSafeDatabase } from './sqlite-factory.ts';
 
+const lookup = promisify(dns.lookup);
+
 const postgresUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.PG_URL;
-const isPg = Boolean(postgresUrl || process.env.PGDATABASE);
+const isPg = Boolean(
+  postgresUrl || 
+  process.env.PGHOST || 
+  process.env.PGDATABASE || 
+  process.env.USE_POSTGRES === 'true'
+);
+
+// Helper to check DNS resolution
+async function checkDns(hostname: string) {
+  try {
+    const result = await lookup(hostname);
+    logger.info(`DNS check for ${hostname}: Success (${result.address})`);
+    return true;
+  } catch (err: any) {
+    logger.error(`DNS check for ${hostname} FAILED: ${err.message}. Please verify the hostname in Dokploy project settings.`);
+    return false;
+  }
+}
 
 let pgPool: pg.Pool | null = null;
 let sqliteDb: Database.Database | null = null;
@@ -94,6 +115,9 @@ async function initPgTables(pool: pg.Pool) {
       tfa_mode VARCHAR(50) DEFAULT 'app',
       tfa_secret TEXT,
       is_verified INT DEFAULT 0,
+      is_email_verified INT DEFAULT 0,
+      is_nid_verified INT DEFAULT 0,
+      nid_number VARCHAR(100),
       is_admin INT DEFAULT 0,
       phone VARCHAR(50),
       country VARCHAR(100),
@@ -391,6 +415,9 @@ async function initPgTables(pool: pg.Pool) {
   await addPgColIfMissing('users', 'nickname', 'VARCHAR(255)');
   await addPgColIfMissing('users', 'password_hash', 'TEXT');
   await addPgColIfMissing('users', 'country_code', 'VARCHAR(20)');
+  await addPgColIfMissing('users', 'is_email_verified', 'INT DEFAULT 0');
+  await addPgColIfMissing('users', 'is_nid_verified', 'INT DEFAULT 0');
+  await addPgColIfMissing('users', 'nid_number', 'VARCHAR(100)');
   await addPgColIfMissing('users', 'referral_sub_id', 'VARCHAR(100)');
   await addPgColIfMissing('users', 'referral_type', 'VARCHAR(100)');
 
@@ -437,6 +464,9 @@ function initSqliteTables(db: Database.Database) {
     tfa_mode TEXT DEFAULT 'app',
     tfa_secret TEXT,
     is_verified INTEGER DEFAULT 0,
+    is_email_verified INTEGER DEFAULT 0,
+    is_nid_verified INTEGER DEFAULT 0,
+    nid_number TEXT,
     is_admin INTEGER DEFAULT 0,
     phone TEXT,
     country TEXT,
@@ -758,6 +788,9 @@ function initSqliteTables(db: Database.Database) {
   addColIfMissing('users', 'nickname TEXT');
   addColIfMissing('users', 'password_hash TEXT');
   addColIfMissing('users', 'country_code TEXT');
+  addColIfMissing('users', 'is_email_verified INTEGER DEFAULT 0');
+  addColIfMissing('users', 'is_nid_verified INTEGER DEFAULT 0');
+  addColIfMissing('users', 'nid_number TEXT');
   addColIfMissing('users', 'referral_sub_id TEXT');
   addColIfMissing('users', 'referral_type TEXT');
   addColIfMissing('transactions', 'order_id TEXT');
@@ -771,23 +804,49 @@ function initSqliteTables(db: Database.Database) {
 
 function parseAndFixPgUrl(rawUrl: string): string {
   if (!rawUrl) return rawUrl;
+  let url = rawUrl.trim();
+  // Remove surrounding quotes if any
+  if ((url.startsWith('"') && url.endsWith('"')) || (url.startsWith("'") && url.endsWith("'"))) {
+    url = url.substring(1, url.length - 1);
+  }
+
   try {
-    const match = rawUrl.match(/^(postgres(?:ql)?:\/\/)(.+)(@[\w\.-]+:\d+\/.*)$/i);
+    // Standard URL parser is better at handling components, but doesn't support postgresql:// directly in all environments
+    // So we use a more robust regex that identifies the host part by searching for the LAST @ before the host:port part
+    const match = url.match(/^(postgres(?:ql)?:\/\/)(.*)@([\w\.-]+(?::\d+)?\/.*)$/i);
     if (match) {
       const prefix = match[1];
       const creds = match[2];
       const suffix = match[3];
+      
+      // The credentials part might contain the user:pass
+      // We look for the FIRST colon to separate user and pass
       const firstColonIndex = creds.indexOf(':');
       if (firstColonIndex !== -1) {
         const user = creds.substring(0, firstColonIndex);
         const pass = creds.substring(firstColonIndex + 1);
+        
+        // Encode both parts safely
         const encUser = encodeURIComponent(decodeURIComponent(user));
         const encPass = encodeURIComponent(decodeURIComponent(pass));
-        return `${prefix}${encUser}:${encPass}${suffix}`;
+        
+        const fixed = `${prefix}${encUser}:${encPass}@${suffix}`;
+        
+        // Extract hostname for debug logging
+        const hostMatch = suffix.match(/^([\w\.-]+)/);
+        if (hostMatch) {
+          const hostname = hostMatch[1];
+          logger.info(`Database connection attempt targeting host: ${hostname}`);
+          checkDns(hostname); // Diagnostic check
+        }
+        
+        return fixed;
       }
     }
-  } catch (e) {}
-  return rawUrl;
+  } catch (e: any) {
+    logger.error("Error in parseAndFixPgUrl: " + e.message);
+  }
+  return url;
 }
 
 let usePg = Boolean(isPg);
@@ -814,8 +873,10 @@ function ensureSqliteDb() {
   return sqliteDb;
 }
 
-// Always ensure SQLite fallback is ready
-ensureSqliteDb();
+// Only ensure SQLite if NOT in PostgreSQL mode
+if (!isPg) {
+  ensureSqliteDb();
+}
 
 if (isPg) {
   const rawConnString = postgresUrl || `postgres://${process.env.PGUSER || 'postgres'}:${process.env.PGPASSWORD || ''}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'postgres'}`;
@@ -846,7 +907,11 @@ if (isPg) {
       logger.info("✅ PostgreSQL connected successfully! All app data will persist in PostgreSQL.");
       await initPgTables(pool);
     } catch (err: any) {
-      if (attempt <= 3 || attempt % 10 === 0) {
+      if (err.code === 'EAI_AGAIN' || err.message.includes('getaddrinfo')) {
+        const hostMatch = connectionString.match(/@([\w\.-]+)/);
+        const host = hostMatch ? hostMatch[1] : 'unknown';
+        logger.error(`🚨 DATABASE HOST NOT FOUND: The host "${host}" could not be resolved. Please verify the host name in Dokploy. (Attempt ${attempt})`);
+      } else if (attempt <= 3 || attempt % 10 === 0) {
         logger.info(`Connecting to PostgreSQL (attempt ${attempt})... ${err.message}`);
       }
       setTimeout(() => connectWithRetry(attempt + 1), 3000);
@@ -887,6 +952,11 @@ export async function query(sql: string, params: any[] = [], conn?: any) {
       return res.rows;
     } catch (err: any) {
       if (isPgNetworkError(err)) {
+        // If DATABASE_URL is explicitly provided, avoid silent fallback to SQLite to prevent data loss
+        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+           logger.error(`PostgreSQL Error: ${err.message}. SQLite fallback DISABLED to prevent data loss.`);
+           throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
+        }
         logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
@@ -913,6 +983,10 @@ export async function get(sql: string, params: any[] = [], conn?: any) {
       return res.rows[0] || null;
     } catch (err: any) {
       if (isPgNetworkError(err)) {
+        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+           logger.error(`PostgreSQL Error (get): ${err.message}. SQLite fallback DISABLED.`);
+           throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
+        }
         logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
@@ -964,12 +1038,20 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
             };
           } catch (innerErr: any) {
             if (isPgNetworkError(innerErr)) {
+              if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+                 logger.error(`PostgreSQL Error (run-insert): ${innerErr.message}. SQLite fallback DISABLED.`);
+                 throw new Error(`PostgreSQL Connection Failed: ${innerErr.message}`);
+              }
               logger.warn(`PostgreSQL network issue (${innerErr.message}). Falling back to SQLite.`);
             } else {
               throw innerErr;
             }
           }
         } else if (isPgNetworkError(err)) {
+          if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+             logger.error(`PostgreSQL Error (run): ${err.message}. SQLite fallback DISABLED.`);
+             throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
+          }
           logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
         } else {
           throw err;
@@ -977,6 +1059,10 @@ export async function run(sql: string, params: any[] = [], conn?: any) {
       }
     } catch (err: any) {
       if (isPgNetworkError(err)) {
+        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+           logger.error(`PostgreSQL Error (run-outer): ${err.message}. SQLite fallback DISABLED.`);
+           throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
+        }
         logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;
@@ -1005,6 +1091,10 @@ export async function transaction<T>(fn: (connection: any) => Promise<T>): Promi
       } catch (err) {
         try { await client.query('ROLLBACK'); } catch {}
         if (isPgNetworkError(err)) {
+          if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+             logger.error(`PostgreSQL Error (transaction): ${(err as any)?.message}. SQLite fallback DISABLED.`);
+             throw new Error(`PostgreSQL Transaction Failed: ${(err as any)?.message}`);
+          }
           logger.warn(`PostgreSQL network issue (${(err as any)?.message}). Falling back to SQLite.`);
         } else {
           throw err;
@@ -1014,6 +1104,10 @@ export async function transaction<T>(fn: (connection: any) => Promise<T>): Promi
       }
     } catch (err: any) {
       if (isPgNetworkError(err)) {
+        if (process.env.DATABASE_URL || process.env.USE_POSTGRES === 'true') {
+           logger.error(`PostgreSQL Error (transaction-outer): ${err.message}. SQLite fallback DISABLED.`);
+           throw new Error(`PostgreSQL Connection Failed: ${err.message}`);
+        }
         logger.warn(`PostgreSQL network issue (${err.message}). Falling back to SQLite.`);
       } else {
         throw err;

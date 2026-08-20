@@ -592,9 +592,11 @@ export default function ProfilePage() {
                       </div>
                       <div className="text-left">
                         <h4 className="font-extrabold text-gray-900 text-lg leading-tight">
-                          {(kycStatus?.status === 'approved' || kycStatus?.status === 'verified') ? (tr.statusPremium || 'Premium Star') : kycStatus?.status === 'pending' ? (tr.kycProgress || 'In Review') : (tr.statusStandard || 'Standard')}
+                          {(user.isNidVerified || kycStatus?.status === 'approved' || kycStatus?.status === 'verified') ? (tr.statusPremium || 'Verified Star') : kycStatus?.status === 'pending' ? (tr.kycProgress || 'In Review') : (tr.statusStandard || 'Standard')}
                         </h4>
-                        <p className="text-xs text-gray-500 font-semibold mt-0.5">{tr.yourStatus || "Your status"}</p>
+                        <p className="text-xs text-gray-500 font-semibold mt-0.5">
+                          {(user.isNidVerified || kycStatus?.status === 'approved' || kycStatus?.status === 'verified') ? 'NID Verified' : kycStatus?.status === 'pending' ? 'Reviewing Documents' : tr.yourStatus || "Your status"}
+                        </p>
                       </div>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-gray-400 group-hover:bg-[#ffe24c] group-hover:text-gray-900 transition-all border border-gray-200/60 shadow-xs shrink-0">
@@ -819,9 +821,10 @@ export default function ProfilePage() {
                       <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-1">{tr.email || "Email"}</label>
                       <span className="text-gray-900 font-bold block truncate max-w-xs">{user.email}</span>
                     </div>
-                    {(user.isVerified || user.is_verified || user.emailVerified) ? (
-                      <span title="Verified">
-                        <BadgeCheck size={22} className="text-indigo-500 fill-indigo-100/20" />
+                    {(user.isEmailVerified || user.emailVerified || user.isVerified || user.is_verified) ? (
+                      <span title="Verified" className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+                        <BadgeCheck size={14} className="fill-indigo-100/20" />
+                        Verified
                       </span>
                     ) : (
                       <button 

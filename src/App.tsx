@@ -20,35 +20,36 @@ function SupportModalWrapper({ user }: { user: any | null }) {
 }
 
 
-import DocsPage from './pages/DocsPage';
-import ProfilePage from './pages/Profile';
-import AffiliatePage from './pages/Affiliate';
-import { Tournaments } from './pages/Tournaments';
-import { TournamentDetails } from './pages/TournamentDetails';
-import Homepage from './pages/Homepage';
-import TradeTerminal from './pages/TradeTerminal';
-import AdminDashboard from './pages/AdminDashboard';
-import SignalsPage from './pages/Signals';
-import CopyTradingPage from './pages/CopyTrading';
-import StaticPage from './pages/StaticPage';
-import AboutUsPage from './pages/AboutUs';
-import NewsPage from './pages/NewsPage';
-import BinancePayPage from './pages/BinancePayPage';
-import CryptoDepositPage from './pages/CryptoDepositPage';
-import MFSDepositPage from './pages/MFSDepositPage';
-import BkashDeposit from './pages/BkashDeposit';
-import NagadDeposit from './pages/NagadDeposit';
-import RocketDeposit from './pages/RocketDeposit';
-import UsdtTrc20Deposit from './pages/UsdtTrc20Deposit';
-import BitcoinDeposit from './pages/BitcoinDeposit';
-import TonDeposit from './pages/TonDeposit';
-import DogeDeposit from './pages/DogeDeposit';
-import LtcDeposit from './pages/LtcDeposit';
-import GoPayDepositPage from './pages/GoPayDepositPage';
-import AuthPage from './pages/AuthPage';
-import AffiliateLandingPage from './pages/AffiliateLanding';
-import EnterpriseSupportCenter from './pages/EnterpriseSupportCenter';
-import ClientSupportCenter from './pages/ClientSupportCenter';
+// Lazy-loaded pages
+const DocsPage = lazy(() => import('./pages/DocsPage'));
+const ProfilePage = lazy(() => import('./pages/Profile'));
+const AffiliatePage = lazy(() => import('./pages/Affiliate'));
+const Tournaments = lazy(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })));
+const TournamentDetails = lazy(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })));
+const Homepage = lazy(() => import('./pages/Homepage'));
+const TradeTerminal = lazy(() => import('./pages/TradeTerminal'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const SignalsPage = lazy(() => import('./pages/Signals'));
+const CopyTradingPage = lazy(() => import('./pages/CopyTrading'));
+const StaticPage = lazy(() => import('./pages/StaticPage'));
+const AboutUsPage = lazy(() => import('./pages/AboutUs'));
+const NewsPage = lazy(() => import('./pages/NewsPage'));
+const BinancePayPage = lazy(() => import('./pages/BinancePayPage'));
+const CryptoDepositPage = lazy(() => import('./pages/CryptoDepositPage'));
+const MFSDepositPage = lazy(() => import('./pages/MFSDepositPage'));
+const BkashDeposit = lazy(() => import('./pages/BkashDeposit'));
+const NagadDeposit = lazy(() => import('./pages/NagadDeposit'));
+const RocketDeposit = lazy(() => import('./pages/RocketDeposit'));
+const UsdtTrc20Deposit = lazy(() => import('./pages/UsdtTrc20Deposit'));
+const BitcoinDeposit = lazy(() => import('./pages/BitcoinDeposit'));
+const TonDeposit = lazy(() => import('./pages/TonDeposit'));
+const DogeDeposit = lazy(() => import('./pages/DogeDeposit'));
+const LtcDeposit = lazy(() => import('./pages/LtcDeposit'));
+const GoPayDepositPage = lazy(() => import('./pages/GoPayDepositPage'));
+const AuthPage = lazy(() => import('./pages/AuthPage'));
+const AffiliateLandingPage = lazy(() => import('./pages/AffiliateLanding'));
+const EnterpriseSupportCenter = lazy(() => import('./pages/EnterpriseSupportCenter'));
+const ClientSupportCenter = lazy(() => import('./pages/ClientSupportCenter'));
 
 // Loader for Suspense
 const PageLoader = () => (

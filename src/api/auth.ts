@@ -807,14 +807,15 @@ router.post('/verify-email-otp', requireAuth, async (req: any, res: any) => {
   }
 
   // Mark as verified
-  await run('UPDATE users SET is_verified = 1 WHERE uid = ?', [uid]);
+  await run('UPDATE users SET is_verified = 1, is_email_verified = 1 WHERE uid = ?', [uid]);
   
   if (adminDb) {
     try {
       await adminDb.collection('users').doc(uid).set({ 
         is_verified: true, 
         isVerified: true,
-        emailVerified: true 
+        emailVerified: true,
+        isEmailVerified: true 
       }, { merge: true });
       await adminDb.collection('verification_codes').doc(uid).delete().catch(() => {});
       logger.info(`Updated Firestore verification status for user ${uid}`);

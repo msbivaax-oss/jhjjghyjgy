@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
       minify: 'esbuild',
       cssMinify: true,
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 1200,
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -39,7 +39,16 @@ export default defineConfig(({ mode }) => {
               if (id.includes('recharts') || id.includes('d3')) return 'vendor-viz';
               if (id.includes('firebase')) return 'vendor-firebase';
               if (id.includes('motion')) return 'vendor-motion';
+              if (id.includes('socket.io-client')) return 'vendor-socket';
               return 'vendor-lib';
+            }
+            // Group common core utilities into a shared chunk
+            if (id.includes('src/firebase.ts') || 
+                id.includes('src/lib/') || 
+                id.includes('src/hooks/') || 
+                id.includes('src/contexts/') || 
+                id.includes('src/context/')) {
+              return 'app-core';
             }
           }
         }

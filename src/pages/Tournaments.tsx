@@ -30,6 +30,8 @@ export const Tournaments: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const isFeatureLocked = true; // Lock tournaments feature as per user request
+
   const [userCurrency, setUserCurrency] = useState(() => {
     try {
       return localStorage.getItem('user_display_currency') || 'BDT';
@@ -64,7 +66,11 @@ export const Tournaments: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchTournaments();
+    if (!isFeatureLocked) {
+      fetchTournaments();
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   const fetchTournaments = async () => {
@@ -99,6 +105,24 @@ export const Tournaments: React.FC = () => {
     if (hours > 0) return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
     return `${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
   };
+
+  if (isFeatureLocked) {
+    return (
+      <div className="min-h-screen bg-[#2A2B31] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-24 h-24 bg-[#FFDD33]/10 rounded-full flex items-center justify-center mb-6 border border-[#FFDD33]/20 shadow-2xl animate-pulse">
+          <Lock size={48} className="text-[#FFDD33]" />
+        </div>
+        <h1 className="text-3xl font-black mb-4 uppercase tracking-tighter">Tournaments Locked</h1>
+        <p className="text-gray-400 max-w-md mb-8">Tournaments are currently unavailable. Please check back later or contact support for more information.</p>
+        <button 
+          onClick={() => navigate('/')}
+          className="bg-[#FFDD33] hover:bg-[#F0C800] text-black font-bold py-3 px-8 rounded-xl transition-all active:scale-95 shadow-lg"
+        >
+          Back to Trading
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#2A2B31] text-white flex flex-col font-sans">

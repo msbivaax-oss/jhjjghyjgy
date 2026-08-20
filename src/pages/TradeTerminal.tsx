@@ -1766,19 +1766,23 @@ export default function TradeTerminal() {
 
         // Optional: Keep Firestore for real-time legacy sync if needed, but don't let it overwrite REST
         const unsubOpenTrades = onSnapshot(query(collection(db, 'trades'), where('userId', '==', user.uid), where('status', '==', 'open')), (snapshot) => {
-            if (snapshot.empty) return; // Don't wipe REST data if Firestore is empty
             const open = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             setActiveTrades(prev => {
+                // If snapshot is empty, we only clear trades that have a Firestore ID (longer than local temp ID usually)
+                // Actually, just clear anything that isn't optimistic (added in last 5 seconds)
+                const now = Date.now();
+                const optimistic = prev.filter(p => (now - (p.createdAt || 0) < 5000) && !open.some(o => o.id === p.id));
+                
                 const updated = open.map((t: any) => {
                     const existing = prev.find(p => p.id === t.id);
-                    const rawExp = t.expirationTime;
+                    const rawExp = t.expirationTime || (t.expiryTime ? t.expiryTime * 1000 : null);
                     const parsedExp = typeof rawExp === 'number' ? rawExp : (rawExp && typeof rawExp.toDate === 'function' ? rawExp.toDate().getTime() : Date.now());
                     const computedTime = Math.floor((parsedExp - Date.now()) / 1000);
                     if (existing) return { ...existing, ...t, timeLeft: Math.max(0, computedTime) };
-                    return { ...t, timeLeft: Math.max(0, computedTime) };
+                    return { ...t, timeLeft: Math.max(0, computedTime), createdAt: t.createdAt || now };
                 });
-                const localOnly = prev.filter(p => !open.some(o => o.id === p.id) && p.timeLeft > 0);
-                return [...updated, ...localOnly].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                return [...updated, ...optimistic].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
             });
         });
         unsubs.push(unsubOpenTrades);
@@ -2199,6 +2203,8 @@ export default function TradeTerminal() {
   const [calcPayout, setCalcPayout] = useState<number>(82);
 
   const [historyTab, setHistoryTab] = useState<"open" | "closed">("open");
+  const [tradeCategory, setTradeCategory] = useState<"FTT" | "CFD">("FTT");
+  const [showOpenTradesOnChart, setShowOpenTradesOnChart] = useState(true);
   const [realtimeNews, setRealtimeNews] = useState<any[]>([]);
   const [newsData, setNewsData] = useState<any[]>([]);
   const [newsFeedTab, setNewsFeedTab] = useState<"platform">("platform");
@@ -7253,10 +7259,13 @@ const PROMOTED_ARTICLES = [
                           <span className="text-[#FFE24C] font-black text-[15px] leading-none">$15,000</span>
                        </div>
                        <button 
-                         onClick={() => setActiveTab("tournaments")}
-                         className="bg-white/10 hover:bg-white/20 text-white p-1.5 rounded-lg transition-colors border border-white/10"
+                         onClick={() => toast.error("Tournaments are currently closed!")}
+                         className="bg-white/10 hover:bg-white/20 text-white p-1.5 rounded-lg transition-colors border border-white/10 relative group"
                        >
                           <Icons.Settings size={14} />
+                          <div className="absolute -top-1 -right-1 bg-[#131417] rounded-full p-0.5 border border-white/10">
+                             <Lock size={8} className="text-[#FFE24C]" fill="#FFE24C" />
+                          </div>
                        </button>
                     </div>
                   </motion.div>
@@ -8014,13 +8023,17 @@ const PROMOTED_ARTICLES = [
             { icon: Clock, label: t('history'), tab: "history" },
             { icon: Icons.ShoppingBag, label: t('market'), tab: "market" },
             { icon: Icons.Users, label: t('copy'), tab: "copytrading" },
-            { icon: Icons.Trophy, label: t('tournaments'), tab: "tournaments" },
+            { icon: Icons.Trophy, label: t('tournaments'), tab: "tournaments", locked: true },
           ].map((item, idx) => {
             const isActive = activeTab === item.tab || (item.tab === 'history' && activeTab === 'trade');
             return (
             <button
               key={`desktop-sidebar-${idx}`}
               onClick={() => {
+                if ('locked' in item && item.locked) {
+                  toast.error("Tournaments are currently closed!");
+                  return;
+                }
                 if ('onClick' in item && typeof item.onClick === 'function') {
                   item.onClick();
                 } else if ('tab' in item) {
@@ -8032,6 +8045,11 @@ const PROMOTED_ARTICLES = [
               {isActive && <div className="absolute left-0 w-[3px] h-full bg-[#ffe24c] rounded-r-full shadow-[0_0_10px_rgba(255,226,76,0.3)]" />}
               <div className="relative flex flex-col items-center">
                  <item.icon size={22} strokeWidth={isActive ? 2 : 1.5} className="mb-2" />
+                 {('locked' in item && item.locked) && (
+                    <div className="absolute -top-1 -right-1 bg-[#1f2026] rounded-full p-0.5 border border-white/5 shadow-lg">
+                       <Lock size={10} className="text-[#ffe24c]" fill="#ffe24c" />
+                    </div>
+                 )}
                  {('tab' in item) && (item.tab === 'history') && visibleActiveTrades.length > 0 && (
                     <div className="absolute -top-1.5 -right-2.5 bg-[#f44336] text-white text-[9px] font-black h-[16px] min-w-[16px] px-1 rounded-full flex items-center justify-center border border-[#1f2026] shadow-lg animate-pulse">
                       {visibleActiveTrades.length}
@@ -8475,7 +8493,7 @@ const PROMOTED_ARTICLES = [
                 {openForTraders && (
                   <div className="flex flex-col bg-[#1a1b1f]">
                     {[
-                      { label: t('tournaments'), tab: "tournaments" },
+                      { label: t('tournaments'), tab: "tournaments", locked: true },
                       { label: t('promotions'), tab: "promotions" },
                       { label: t('calculator'), tab: "calculator" },
                       { label: t('strategies'), tab: "strategies" },
@@ -8484,12 +8502,17 @@ const PROMOTED_ARTICLES = [
                       <button 
                         key={`sidebar-drawer-${link.tab}`} 
                         onClick={() => {
+                          if ('locked' in link && link.locked) {
+                            toast.error("Tournaments are currently closed!");
+                            return;
+                          }
                           setActiveTab(link.tab as any);
                           setShowSidebar(false);
                         }}
-                        className="flex items-center px-6 h-[50px] text-left text-[14px] text-gray-400 hover:text-white transition-colors border-t border-white/5"
+                        className="flex items-center justify-between px-6 h-[50px] text-left text-[14px] text-gray-400 hover:text-white transition-colors border-t border-white/5"
                       >
-                        {link.label}
+                        <span>{link.label}</span>
+                        {('locked' in link && link.locked) && <Lock size={14} className="text-[#ffe24c]" />}
                       </button>
                     ))}
                   </div>
@@ -8709,13 +8732,22 @@ const PROMOTED_ARTICLES = [
                   <div className="space-y-4">
                     {/* Tournaments (Large Card) */}
                     <button 
-                      onClick={() => setActiveTab("tournaments")}
-                      className="w-full bg-[#2a2c31] hover:bg-[#32343a] rounded-2xl p-5 flex items-center gap-5 transition-all border border-white/5 shadow-lg group h-[100px]"
+                      onClick={() => toast.error("Tournaments are currently closed!")}
+                      className="w-full bg-[#2a2c31] hover:bg-[#32343a] rounded-2xl p-5 flex items-center justify-between transition-all border border-white/5 shadow-lg group h-[100px] relative overflow-hidden"
                     >
-                      <div className="w-14 h-14 rounded-xl bg-[#1f2026] flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform">
-                        <Trophy size={28} className="text-white" />
+                      <div className="flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-xl bg-[#1f2026] flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform">
+                          <Trophy size={28} className="text-white" />
+                        </div>
+                        <span className="text-[18px] font-black text-white tracking-tight">Tournaments</span>
                       </div>
-                      <span className="text-[18px] font-black text-white tracking-tight">Tournaments</span>
+                      <div className="bg-[#ffe24c]/10 p-2 rounded-xl border border-[#ffe24c]/20">
+                         <Lock size={20} className="text-[#ffe24c]" />
+                      </div>
+                      {/* Diagonal Overlay Strip */}
+                      <div className="absolute top-2 -right-12 bg-[#ffe24c] text-[#1f2026] text-[10px] font-black px-12 py-1 rotate-45 shadow-lg">
+                        LOCKED
+                      </div>
                     </button>
 
                     {/* 3 Square Grid Items */}
@@ -9936,53 +9968,77 @@ const PROMOTED_ARTICLES = [
       )}
       {/* TRADES HISTORY DRAWER */}
       {activeTab === "history" && (
-        <div className="fixed md:absolute inset-y-0 left-0 w-full md:w-[50vw] z-[150] flex flex-col overflow-hidden bg-[#121214] border-r border-white/5 shadow-2xl animate-in slide-in-from-left duration-300">
+        <div className="fixed md:absolute inset-y-0 left-0 w-full md:w-[50vw] z-[150] flex flex-col overflow-hidden bg-[#131417] border-r border-white/5 shadow-2xl animate-in slide-in-from-left duration-300">
           <div className="w-full h-full flex flex-col relative text-white z-50">
             {/* Top Header */}
-            <div className="h-[64px] flex items-center justify-between px-6 border-b border-white/5 bg-[#121214] shrink-0">
+            <div className="h-[64px] flex items-center justify-between px-6 bg-[#131417] shrink-0">
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setActiveTab("trade")}
-                  className="text-[#9ea0a5] hover:text-white transition-colors p-2 -ml-2"
+                  className="text-white hover:text-gray-300 transition-colors p-2 -ml-2"
                 >
                   <ArrowLeft size={24} strokeWidth={2} />
                 </button>
-                <h2 className="text-[20px] font-black tracking-tight text-white m-0 uppercase">
+                <h2 className="text-[22px] font-black tracking-tight text-white m-0">
                   Trades
                 </h2>
               </div>
               <div className="flex items-center gap-2">
                  <button className="p-2 text-gray-400 hover:text-white transition-colors">
-                    <Search size={20} />
-                 </button>
-                 <button className="p-2 text-gray-400 hover:text-white transition-colors" onClick={() => setActiveTab("trade")}>
-                    <X size={24} strokeWidth={1.5} />
+                    <Search size={22} />
                  </button>
               </div>
             </div>
 
-            {/* Sub Tabs */}
-            <div className="px-6 bg-[#121214] border-b border-white/5 shrink-0">
-              <div className="flex w-full items-center gap-8">
+            {/* FTT / CFD Pills */}
+            <div className="px-6 py-4 flex gap-2 shrink-0">
+               <button 
+                  onClick={() => setTradeCategory('FTT')}
+                  className={`flex-1 h-[40px] rounded-full transition-all font-bold text-[14px] ${tradeCategory === 'FTT' ? 'bg-[#2a2c31] text-white shadow-lg' : 'bg-transparent text-[#7b8390]'}`}
+               >
+                  FTT
+               </button>
+               <button 
+                  onClick={() => setTradeCategory('CFD')}
+                  className={`flex-1 h-[40px] rounded-full transition-all font-bold text-[14px] ${tradeCategory === 'CFD' ? 'bg-[#2a2c31] text-white shadow-lg' : 'bg-transparent text-[#7b8390]'}`}
+               >
+                  CFD
+               </button>
+            </div>
+
+            {/* Open Trades on Chart Checkbox */}
+            <div className="px-6 pb-4 shrink-0">
+               <div 
+                onClick={() => setShowOpenTradesOnChart(!showOpenTradesOnChart)}
+                className="flex items-center gap-4 bg-[#212226] border border-white/5 p-4 rounded-[18px] cursor-pointer"
+               >
+                  <div className={`relative w-6 h-6 rounded-md flex items-center justify-center transition-all ${showOpenTradesOnChart ? 'bg-[#ffe24c]' : 'bg-[#2a2b30]'}`}>
+                     {showOpenTradesOnChart && <Check size={18} className="text-black" strokeWidth={4} />}
+                  </div>
+                  <span className="text-[15px] font-bold text-white">Open trades on chart</span>
+               </div>
+            </div>
+
+            {/* Open/Closed Tabs */}
+            <div className="px-6 py-2 flex gap-6 border-b border-white/5 bg-[#131417]">
                 <button 
-                  onClick={() => setHistoryTab("open")}
-                  className={`py-4 text-[14px] font-bold tracking-wider transition-all relative ${historyTab === "open" ? "text-[#ffe24c]" : "text-[#7b8390]"}`}
+                    onClick={() => setHistoryTab('open')}
+                    className={`text-[14px] font-bold transition-all relative pb-2 ${historyTab === 'open' ? 'text-[#00ff88]' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                  OPEN
-                  {historyTab === "open" && <motion.div layoutId="history-tab-indicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ffe24c]" />}
+                    OPEN
+                    {historyTab === 'open' && <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#00ff88] rounded-full shadow-[0_0_8px_rgba(0,255,136,0.5)]" />}
                 </button>
                 <button 
-                  onClick={() => setHistoryTab("closed")}
-                  className={`py-4 text-[14px] font-bold tracking-wider transition-all relative ${historyTab === "closed" ? "text-white" : "text-[#7b8390]"}`}
+                    onClick={() => setHistoryTab('closed')}
+                    className={`text-[14px] font-bold transition-all relative pb-2 ${historyTab === 'closed' ? 'text-[#00ff88]' : 'text-gray-500 hover:text-gray-300'}`}
                 >
-                  CLOSED
-                  {historyTab === "closed" && <motion.div layoutId="history-tab-indicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />}
+                    CLOSED
+                    {historyTab === 'closed' && <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#00ff88] rounded-full shadow-[0_0_8px_rgba(0,255,136,0.5)]" />}
                 </button>
-              </div>
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 bg-[#0B0B0C] relative custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-4 py-2 bg-[#131417] relative custom-scrollbar">
               {historyLoading ? (
                 <div className="space-y-3">
                   {/* Skeleton Stats Card */}
@@ -10015,17 +10071,13 @@ const PROMOTED_ARTICLES = [
                   ))}
                 </div>
               ) : (
-                <div className="w-full mx-auto px-2 md:px-6">
-
-
+                <div className="w-full mx-auto">
                 <div className="flex flex-col pb-20">
-                      {/* Firebase Data Fetching Logic for Trades */}
                       {(() => {
-                          const filtered = historyTab === "open" 
-                            ? visibleActiveTrades 
-                            : visibleUserTrades.filter(t => t.status !== 'open');
+                          const closedTrades = visibleUserTrades.filter(t => t.status !== 'open');
+                          const tradesToDisplay = historyTab === 'open' ? visibleActiveTrades : closedTrades;
 
-                          if (filtered.length === 0) {
+                          if (tradesToDisplay.length === 0) {
                               return (
                                   <div className="text-center py-12 flex flex-col items-center gap-4">
                                       <div className="w-16 h-16 bg-[#2a2b30] rounded-full flex items-center justify-center text-gray-600">
@@ -10036,7 +10088,7 @@ const PROMOTED_ARTICLES = [
                               );
                           }
 
-                          return filtered.map((trade: any, idx: number) => {
+                          return tradesToDisplay.map((trade: any, idx: number) => {
                              const isWin = trade.status === 'won';
                              const isLoss = trade.status === 'lost';
                              const isDraw = trade.status === 'draw';
@@ -10046,45 +10098,50 @@ const PROMOTED_ARTICLES = [
                              return (
                                <div
                                  key={`trade-list-item-${trade.id || 'no-id'}-${idx}`}
-                                 className={`bg-[#1C1C1E] rounded-xl p-4 flex flex-col border border-white/5 cursor-pointer hover:bg-white/[0.04] transition-all relative mb-3 group ${isOpen ? 'border-yellow-500/20' : ''}`}
+                                 className="bg-[#212226] hover:bg-[#2a2b31] rounded-[20px] p-5 flex flex-col transition-all cursor-pointer mb-3 relative group"
                                  onClick={() => {
                                    setSelectedTrade(trade);
                                    setActiveTab("history-detail");
                                  }}
                                >
-                                 <div className="flex justify-between items-center mb-1">
-                                     <div className="flex items-center gap-3">
-                                         <AssetLogo name={trade.asset} size={24} />
-                                         <div className="flex items-center gap-1.5">
-                                            <span className="text-[16px] font-bold text-white tracking-tight leading-none">{trade.asset}</span>
-                                            <span className="text-[14px] text-gray-500 font-medium">{trade.payout}%</span>
+                                 <div className="flex justify-between items-start mb-2">
+                                     <div className="flex items-center gap-4">
+                                         <div className="relative">
+                                            <AssetLogo name={trade.asset} size={36} />
+                                         </div>
+                                         <div className="flex flex-col">
+                                            <div className="flex items-center gap-2">
+                                               <span className="text-[16px] font-black text-white tracking-tight">{trade.asset}</span>
+                                               <span className="text-[14px] text-gray-500 font-bold">{trade.payout}%</span>
+                                            </div>
                                          </div>
                                      </div>
                                      <div className="flex flex-col items-end">
-                                        <span className={`text-[15px] font-bold tracking-tight ${isWin ? "text-[#FFE24C]" : "text-gray-500"}`}>
-                                           {isWin ? `+ ${formatWithCurrency(profit, userCurrency)}` : (isDraw ? formatWithCurrency(trade.amount, userCurrency) : formatWithCurrency(0, userCurrency))}
+                                        <span className={`text-[16px] font-black tracking-tight ${isWin ? "text-white" : (isOpen ? "text-white" : "text-gray-500")}`}>
+                                           {isOpen ? '--' : (isWin ? `${formatWithCurrency(profit, userCurrency)}` : (isDraw ? formatWithCurrency(trade.amount, userCurrency) : formatWithCurrency(0, userCurrency)))}
                                         </span>
                                      </div>
                                  </div>
 
-                                 <div className="flex justify-between items-center">
-                                   <div className="flex items-center gap-2">
-                                       <div className={`flex items-center justify-center ${trade.type === 'up' ? 'text-[#00C980]' : 'text-[#FF4D4F]'}`}>
-                                          {trade.type === 'up' ? <ArrowUp size={14} strokeWidth={3} /> : <ArrowDown size={14} strokeWidth={3} />}
+                                 <div className="flex justify-between items-center mt-1">
+                                   <div className="flex items-center gap-3">
+                                       <div className={`w-6 h-6 rounded-md flex items-center justify-center ${trade.type === 'up' ? 'bg-[#00C980]' : 'bg-[#FF4D4F]'}`}>
+                                          {trade.type === 'up' ? <ArrowUp size={14} className="text-white" strokeWidth={4} /> : <ArrowDown size={14} className="text-white" strokeWidth={4} />}
                                        </div>
-                                       <span className="text-[12px] text-gray-500 font-medium flex items-center gap-1">
-                                          {new Date(trade.createdAt || trade.entryTime * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-                                          <span className="w-1 h-1 rounded-full bg-gray-700"></span>
-                                          {new Date(trade.createdAt || trade.entryTime * 1000).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                                       <span className="text-[13px] text-gray-400 font-bold">
+                                          {(() => {
+                                              const d = trade.createdAt?.toDate ? trade.createdAt.toDate() : new Date(trade.createdAt);
+                                              return `${d.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })} · ${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`;
+                                          })()}
                                        </span>
                                    </div>
-                                   <span className="text-white font-bold text-[15px] tracking-tight">
+                                   <div className="text-[13px] text-gray-500 font-bold">
                                       {formatWithCurrency(trade.amount, userCurrency)}
-                                   </span>
+                                   </div>
                                  </div>
                                </div>
                              );
-                           });
+                          });
                       })()}
                 </div>
               </div>
@@ -10319,84 +10376,86 @@ const PROMOTED_ARTICLES = [
 
       {/* DETAILED TRADE VIEW */}
       {activeTab === "history-detail" && selectedTrade && (
-        <div className="fixed inset-0 md:left-[72px] z-[600] flex flex-col overflow-hidden bg-[#121214] animate-in fade-in slide-in-from-right duration-300">
+        <div className="fixed inset-0 md:left-[72px] z-[600] flex flex-col overflow-hidden bg-[#131417] animate-in fade-in slide-in-from-right duration-300">
           <div className="w-full h-full flex flex-col relative text-white z-50">
             {/* Top Header */}
-            <div className="h-[64px] flex items-center gap-4 px-6 border-b border-white/5 bg-[#121214] shrink-0">
+            <div className="h-[64px] flex items-center gap-4 px-6 bg-[#131417] shrink-0">
               <button
                 onClick={() => setActiveTab("history")}
-                className="text-[#9ea0a5] hover:text-white transition-colors p-2 -ml-2"
+                className="text-white hover:text-gray-300 transition-colors p-2 -ml-2"
               >
                 <Icons.ArrowLeft size={24} strokeWidth={2} />
               </button>
-              <h2 className="text-[20px] font-bold tracking-tight text-white uppercase">
+              <h2 className="text-[20px] font-bold tracking-tight text-white">
                 {selectedTrade.asset}
               </h2>
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto px-4 py-8 bg-[#0B0B0C] relative custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-4 py-8 bg-[#131417] relative custom-scrollbar">
                 <div className="w-full mx-auto px-2 md:px-6">
-                  <div className="flex flex-col items-center mb-10">
-                  <div className="w-20 h-20 bg-[#1C1C1E] rounded-[24px] flex items-center justify-center mb-4 border border-white/5 shadow-xl">
-                    <AssetLogo name={selectedTrade.asset} size={48} />
+                  <div className="flex flex-col items-center mb-8">
+                  <div className="w-20 h-20 flex items-center justify-center mb-6">
+                    <AssetLogo name={selectedTrade.asset} size={64} />
                   </div>
-                  <h2 className="text-[32px] font-black tracking-tight text-white mb-1">
+                  <h2 className="text-[36px] font-black tracking-tight text-white mb-2">
                     {selectedTrade.asset}
                   </h2>
-                  <div className="flex items-center gap-3 text-gray-500 font-medium">
-                     <span className="text-sm">ID {selectedTrade.id ? String(selectedTrade.id).substring(0, 10).toUpperCase() : '4739925494'}</span>
-                     <span className="w-1 h-1 rounded-full bg-gray-700"></span>
-                     <span className="text-sm flex items-center gap-1.5"><Calendar size={14} /> {new Date(selectedTrade.createdAt || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  <div className="flex items-center gap-2 text-gray-500 font-bold">
+                     <span className="text-[14px]">ID {selectedTrade.id ? String(selectedTrade.id).substring(0, 11).toUpperCase() : '12225378264'}</span>
+                     <span className="text-[14px]">, 1 - 5 m</span>
+                     <div className="flex items-center gap-2 ml-4">
+                        <Calendar size={14} className="text-gray-500" />
+                        <span className="text-[14px]">{new Date(selectedTrade.createdAt || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-4 mb-10">
+                <div className="mb-10">
                   <button 
                     onClick={() => {
                       setActiveAsset(selectedTrade.asset);
                       setActiveTab("trade");
                     }}
-                    className="w-full bg-[#1C1C1E] hover:bg-[#252529] border border-white/5 text-white font-bold text-[16px] py-4 rounded-[16px] transition-all active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 group"
+                    className="w-full bg-[#2a2c31] hover:bg-[#32343a] text-white font-bold text-[17px] py-4 rounded-[12px] transition-all active:scale-[0.98] shadow-lg"
                   >
-                    <span>Trade on asset</span>
-                    <Icons.ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                    Trade on asset
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-8">
-                   <div className="bg-[#1C1C1E] p-5 rounded-[20px] border border-white/5 shadow-sm">
-                      <p className="text-gray-500 text-[13px] font-bold uppercase tracking-wider mb-2">Amount</p>
-                      <p className="text-white text-2xl font-black">{formatWithCurrency(selectedTrade.amount, userCurrency)}</p>
+                <div className="flex flex-col gap-6 mb-8 px-2">
+                   <div className="flex justify-between items-center">
+                      <span className="text-gray-500 text-[16px] font-bold">Amount</span>
+                      <span className="text-white text-[16px] font-black">{formatWithCurrency(selectedTrade.amount, userCurrency)}</span>
                    </div>
-                   <div className="bg-[#1C1C1E] p-5 rounded-[20px] border border-white/5 shadow-sm">
-                      <p className="text-gray-500 text-[13px] font-bold uppercase tracking-wider mb-2">Income</p>
-                      <p className={`text-2xl font-black ${selectedTrade.status === 'won' ? 'text-[#FFE24C]' : 'text-gray-400'}`}>
+                   <div className="flex justify-between items-center">
+                      <span className="text-gray-500 text-[16px] font-bold">Income</span>
+                      <span className={`text-[16px] font-black ${selectedTrade.status === 'won' ? 'text-white' : 'text-white'}`}>
                         {userCurrency} {selectedTrade.status === 'won' 
                           ? (selectedTrade.amount * (selectedTrade.payout / 100 + 1)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
                           : (selectedTrade.status === 'lost' ? '0.00' : selectedTrade.status === 'draw' ? selectedTrade.amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00')}
-                      </p>
+                      </span>
                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-[#1C1C1E] rounded-[20px] p-6 flex flex-col border border-white/5 shadow-sm">
-                    <h3 className="text-gray-500 font-bold text-xs uppercase tracking-widest mb-4">Entry</h3>
-                    <span className="text-white text-lg font-black mb-6 font-mono">
-                      {selectedTrade.entryPrice?.toFixed(8) || '641.86746366'}
+                  <div className="bg-[#212226] rounded-[24px] p-8 flex flex-col shadow-sm">
+                    <h3 className="text-white font-black text-[18px] mb-6">Entry</h3>
+                    <span className="text-white text-[15px] font-bold mb-4">
+                      {selectedTrade.entryPrice?.toFixed(10) || '641.867363825'}
                     </span>
-                    <div className="flex items-center gap-2 text-gray-500 text-sm font-medium mt-auto">
-                      <Clock size={14} /> {new Date(selectedTrade.createdAt).toLocaleTimeString(undefined, { timeZone, hour12: false })}
+                    <div className="flex items-center gap-2 text-gray-500 text-[15px] font-bold">
+                      <Clock size={16} /> {new Date(selectedTrade.createdAt).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </div>
                   </div>
 
-                  <div className="bg-[#1C1C1E] rounded-[20px] p-6 flex flex-col border border-white/5 shadow-sm">
-                    <h3 className="text-gray-500 font-bold text-xs uppercase tracking-widest mb-4">Exit</h3>
-                    <span className="text-white text-lg font-black mb-6 font-mono">
-                      {selectedTrade.exitPrice?.toFixed(8) || (selectedTrade.status === 'open' ? 'PENDING' : '641.86746411')}
+                  <div className="bg-[#212226] rounded-[24px] p-8 flex flex-col shadow-sm">
+                    <h3 className="text-white font-black text-[18px] mb-6">Exit</h3>
+                    <span className="text-white text-[15px] font-bold mb-4">
+                      {selectedTrade.exitPrice?.toFixed(10) || (selectedTrade.status === 'open' ? 'PENDING' : '641.867363625')}
                     </span>
-                    <div className="flex items-center gap-2 text-gray-500 text-sm font-medium mt-auto">
-                      <Clock size={14} /> {selectedTrade.closedAt ? new Date(selectedTrade.closedAt).toLocaleTimeString(undefined, { timeZone, hour12: false }) : (selectedTrade.expirationTime ? new Date(selectedTrade.expirationTime).toLocaleTimeString(undefined, { timeZone, hour12: false }) : '--:--:--')}
+                    <div className="flex items-center gap-2 text-gray-500 text-[15px] font-bold">
+                      <Clock size={16} /> {selectedTrade.closedAt ? new Date(selectedTrade.closedAt).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : (selectedTrade.expirationTime ? new Date(selectedTrade.expirationTime).toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--')}
                     </div>
                   </div>
                 </div>
@@ -10405,6 +10464,7 @@ const PROMOTED_ARTICLES = [
           </div>
         </div>
       )}
+
 
       {/* OVERLAY COPY TRADING MODAL */}
       {activeTab === "copy-trading" && (
