@@ -879,8 +879,21 @@ if (!isPg) {
 }
 
 if (isPg) {
+  if (postgresUrl) {
+    logger.info("Database source: Using DATABASE_URL from environment variables.");
+  } else if (process.env.USE_POSTGRES === 'true') {
+    logger.warn("Database source: USE_POSTGRES is true but DATABASE_URL is missing! Defaulting to fallback parameters.");
+  }
+
   const rawConnString = postgresUrl || `postgres://${process.env.PGUSER || 'postgres'}:${process.env.PGPASSWORD || ''}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'postgres'}`;
   const connectionString = parseAndFixPgUrl(rawConnString);
+  
+  // Detect if we are accidentally connecting to localhost when external DB is intended
+  if (connectionString.includes('127.0.0.1') || connectionString.includes('localhost')) {
+    if (process.env.USE_POSTGRES === 'true' || postgresUrl) {
+      logger.error("🚨 WARNING: Application is attempting to connect to LOCALHOST (127.0.0.1) for PostgreSQL. This usually means DATABASE_URL is not set correctly in Dokploy.");
+    }
+  }
   
   const sslConfig = (connectionString.includes('sslmode=require') || connectionString.includes('neon.tech') || connectionString.includes('supabase') || process.env.PGSSL === 'true')
     ? { rejectUnauthorized: false }
