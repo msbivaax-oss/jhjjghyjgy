@@ -23,6 +23,20 @@ export default defineConfig(({ mode }) => {
     esbuild: {
       drop: isProd ? ['console', 'debugger'] : [],
     },
+    optimizeDeps: {
+      include: [
+        'lucide-react',
+        'recharts',
+        'motion/react',
+        'socket.io-client',
+        'firebase/app',
+        'firebase/firestore',
+        'firebase/auth',
+        'react-router-dom',
+        'react-hot-toast',
+        'lightweight-charts'
+      ]
+    },
     build: {
       outDir: 'dist',
       emptyOutDir: true,

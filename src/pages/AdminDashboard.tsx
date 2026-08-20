@@ -24,12 +24,12 @@ import {
 import { AssetLogo } from '../components/AssetLogo';
 import { MarketControlCard } from '../components/MarketControlCard';
 import { Logo } from '../components/Logo';
-import { AdminBackupView } from '../components/AdminBackupView';
+import { AdminSnapshotView } from '../components/AdminSnapshotView';
 
 
 type Role = 'superadmin' | 'admin' | 'moderator' | 'support' | 'user';
 type PermissionKey = 'canManageUsers' | 'canManageStaff' | 'canManageFinance' | 'canManageContent' | 'canManageMarkets' | 'canManageSystem' | 'canManageDeposits' | 'canManageWithdrawals' | 'canManageKYC' | 'canManageSupport';
-type AdminTab = 'stats' | 'market' | 'banners' | 'users' | 'finance' | 'deposits' | 'news' | 'education' | 'settings' | 'staff' | 'promotions' | 'promos' | 'tournaments' | 'logs' | 'tickets' | 'pages' | 'client_agreement' | 'aml_policy' | 'affiliate' | 'signals' | 'copytrading' | 'kyc' | 'stories' | 'backups';
+type AdminTab = 'stats' | 'market' | 'banners' | 'users' | 'finance' | 'deposits' | 'news' | 'education' | 'settings' | 'staff' | 'promotions' | 'promos' | 'tournaments' | 'logs' | 'tickets' | 'pages' | 'client_agreement' | 'aml_policy' | 'affiliate' | 'signals' | 'copytrading' | 'kyc' | 'stories' | 'snapshots';
 
 const INITIAL_PERMISSIONS: Record<PermissionKey, boolean> = {
   canManageUsers: false,
@@ -743,7 +743,7 @@ export default function AdminDashboard() {
       ? rawAdminEmail.toLowerCase().trim() 
       : "hamproosapport@gmail.com";
   const currentUserEmail = auth.currentUser?.email?.toLowerCase();
-  const isOwner = (currentUserEmail === adminOwnerEmail) || currentUserEmail === "hamproosapport@gmail.com" || currentUserEmail === "hamproosupport@gmail.com" || currentUserEmail === "Bivaaxtrade@gmail.com" || auth.currentUser?.uid === "HFvr43UhRiTSjb6m5sQJHmHGNvm1";
+  const isOwner = (currentUserEmail === adminOwnerEmail) || currentUserEmail === "msbivaax@gmail.com" || currentUserEmail === "bivaaxtrader@gmail.com" || currentUserEmail === "hasan1@gmail.com" || currentUserEmail === "hasan@gmail.com" || currentUserEmail === "hamproosapport@gmail.com" || currentUserEmail === "hamproosupport@gmail.com" || currentUserEmail === "bivaaxtrade@gmail.com" || auth.currentUser?.uid === "HFvr43UhRiTSjb6m5sQJHmHGNvm1";
 
   const isSuper = userRole === 'superadmin';
   const isAdminPerm = isSuper || userRole === 'admin' || userPermissions.canManageSystem;
@@ -1273,7 +1273,7 @@ export default function AdminDashboard() {
                   { id: 'client_agreement', label: 'Client Agreement', icon: FileText, show: canManageContent },
                   { id: 'aml_policy', label: 'AML Policy', icon: Shield, show: canManageContent },
                   { id: 'logs', label: 'Control Logs', icon: FileText, show: isSuper },
-                  { id: 'backups', label: 'Backup & Recovery', icon: HardDrive, show: isSuper },
+                  { id: 'snapshots', label: 'System Recovery', icon: HardDrive, show: isSuper },
                   { id: 'settings', label: 'System Kernel', icon: Settings2, show: canManageSystem },
               ].filter(t => t.show).map(t => (
                   <button 
@@ -4356,9 +4356,9 @@ export default function AdminDashboard() {
                </motion.div>
            )}
 
-           {activeTab === 'backups' && (
-               <motion.div key="backups" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-                   <AdminBackupView />
+           {activeTab === 'snapshots' && (
+               <motion.div key="snapshots" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+                   <AdminSnapshotView />
                </motion.div>
            )}
         </AnimatePresence>

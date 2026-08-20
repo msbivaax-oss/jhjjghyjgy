@@ -13,7 +13,6 @@ import { SupportProvider, useSupport } from './contexts/SupportContext';
 import { LiveSupport } from './components/LiveSupport';
 import { I18nProvider } from './context/I18nContext';
 import AppBoundary from './components/AppBoundary';
-import AdminDashboard from './pages/AdminDashboard';
 
 function SupportModalWrapper({ user }: { user: any | null }) {
   const { isSupportOpen, closeSupport } = useSupport();
@@ -21,35 +20,61 @@ function SupportModalWrapper({ user }: { user: any | null }) {
 }
 
 
+// Resilient lazy loader helper with retry logic for dynamic imports
+const lazyWithRetry = (importFn: () => Promise<any>) =>
+  lazy(async () => {
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const component = await importFn();
+        sessionStorage.removeItem('chunk_reload_attempted');
+        return component;
+      } catch (error: any) {
+        lastError = error;
+        console.warn(`Dynamic import attempt ${attempt + 1} failed, retrying...`, error);
+        await new Promise((res) => setTimeout(res, (attempt + 1) * 500));
+      }
+    }
+    
+    const reloadAttempted = sessionStorage.getItem('chunk_reload_attempted');
+    if (!reloadAttempted) {
+      sessionStorage.setItem('chunk_reload_attempted', 'true');
+      window.location.reload();
+      return new Promise(() => {});
+    }
+    throw lastError;
+  });
+
 // Lazy-loaded pages
-const DocsPage = lazy(() => import('./pages/DocsPage'));
-const ProfilePage = lazy(() => import('./pages/Profile'));
-const AffiliatePage = lazy(() => import('./pages/Affiliate'));
-const Tournaments = lazy(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })));
-const TournamentDetails = lazy(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })));
-const Homepage = lazy(() => import('./pages/Homepage'));
-const TradeTerminal = lazy(() => import('./pages/TradeTerminal'));
-const SignalsPage = lazy(() => import('./pages/Signals'));
-const CopyTradingPage = lazy(() => import('./pages/CopyTrading'));
-const StaticPage = lazy(() => import('./pages/StaticPage'));
-const AboutUsPage = lazy(() => import('./pages/AboutUs'));
-const NewsPage = lazy(() => import('./pages/NewsPage'));
-const BinancePayPage = lazy(() => import('./pages/BinancePayPage'));
-const CryptoDepositPage = lazy(() => import('./pages/CryptoDepositPage'));
-const MFSDepositPage = lazy(() => import('./pages/MFSDepositPage'));
-const BkashDeposit = lazy(() => import('./pages/BkashDeposit'));
-const NagadDeposit = lazy(() => import('./pages/NagadDeposit'));
-const RocketDeposit = lazy(() => import('./pages/RocketDeposit'));
-const UsdtTrc20Deposit = lazy(() => import('./pages/UsdtTrc20Deposit'));
-const BitcoinDeposit = lazy(() => import('./pages/BitcoinDeposit'));
-const TonDeposit = lazy(() => import('./pages/TonDeposit'));
-const DogeDeposit = lazy(() => import('./pages/DogeDeposit'));
-const LtcDeposit = lazy(() => import('./pages/LtcDeposit'));
-const GoPayDepositPage = lazy(() => import('./pages/GoPayDepositPage'));
-const AuthPage = lazy(() => import('./pages/AuthPage'));
-const AffiliateLandingPage = lazy(() => import('./pages/AffiliateLanding'));
-const EnterpriseSupportCenter = lazy(() => import('./pages/EnterpriseSupportCenter'));
-const ClientSupportCenter = lazy(() => import('./pages/ClientSupportCenter'));
+const DocsPage = lazyWithRetry(() => import('./pages/DocsPage'));
+const ProfilePage = lazyWithRetry(() => import('./pages/Profile'));
+const AffiliatePage = lazyWithRetry(() => import('./pages/Affiliate'));
+const Tournaments = lazyWithRetry(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })));
+const TournamentDetails = lazyWithRetry(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })));
+const Homepage = lazyWithRetry(() => import('./pages/Homepage'));
+const TradeTerminal = lazyWithRetry(() => import('./pages/TradeTerminal'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
+const SignalsPage = lazyWithRetry(() => import('./pages/Signals'));
+const CopyTradingPage = lazyWithRetry(() => import('./pages/CopyTrading'));
+const StaticPage = lazyWithRetry(() => import('./pages/StaticPage'));
+const AboutUsPage = lazyWithRetry(() => import('./pages/AboutUs'));
+const NewsPage = lazyWithRetry(() => import('./pages/NewsPage'));
+const BinancePayPage = lazyWithRetry(() => import('./pages/BinancePayPage'));
+const CryptoDepositPage = lazyWithRetry(() => import('./pages/CryptoDepositPage'));
+const MFSDepositPage = lazyWithRetry(() => import('./pages/MFSDepositPage'));
+const BkashDeposit = lazyWithRetry(() => import('./pages/BkashDeposit'));
+const NagadDeposit = lazyWithRetry(() => import('./pages/NagadDeposit'));
+const RocketDeposit = lazyWithRetry(() => import('./pages/RocketDeposit'));
+const UsdtTrc20Deposit = lazyWithRetry(() => import('./pages/UsdtTrc20Deposit'));
+const BitcoinDeposit = lazyWithRetry(() => import('./pages/BitcoinDeposit'));
+const TonDeposit = lazyWithRetry(() => import('./pages/TonDeposit'));
+const DogeDeposit = lazyWithRetry(() => import('./pages/DogeDeposit'));
+const LtcDeposit = lazyWithRetry(() => import('./pages/LtcDeposit'));
+const GoPayDepositPage = lazyWithRetry(() => import('./pages/GoPayDepositPage'));
+const AuthPage = lazyWithRetry(() => import('./pages/AuthPage'));
+const AffiliateLandingPage = lazyWithRetry(() => import('./pages/AffiliateLanding'));
+const EnterpriseSupportCenter = lazyWithRetry(() => import('./pages/EnterpriseSupportCenter'));
+const ClientSupportCenter = lazyWithRetry(() => import('./pages/ClientSupportCenter'));
 
 // Loader for Suspense
 const PageLoader = () => (

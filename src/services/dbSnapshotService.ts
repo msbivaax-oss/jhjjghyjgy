@@ -27,7 +27,7 @@ if (!fs.existsSync(SECURE_OFFSITE_DIR)) {
   fs.mkdirSync(SECURE_OFFSITE_DIR, { recursive: true });
 }
 
-export const DbBackupService = {
+export const DbSnapshotService = {
   /**
    * Generates a full SQL dump of the PostgreSQL database using pg_dump
    * with fallback to logical SQL dumper if pg_dump is not available.

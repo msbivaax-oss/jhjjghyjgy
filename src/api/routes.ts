@@ -2627,9 +2627,9 @@ router.post('/wallet/withdraw',
 
       // DR & Audit Logging
       try {
-        const { BackupService } = await import('../services/backupService.ts');
-        await BackupService.logFinancialAudit(uid, 'withdraw_request', withdrawAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `withdraw_${Date.now()}`);
-        await BackupService.syncUserForDR(uid);
+        const { SnapshotService } = await import('../services/snapshotService.ts');
+        await SnapshotService.logFinancialAudit(uid, 'withdraw_request', withdrawAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `withdraw_${Date.now()}`);
+        await SnapshotService.syncUserForDR(uid);
       } catch (drErr) {
         logger.error('Failed to initiate DR/Audit logging for withdrawal request:', drErr);
       }
@@ -3279,37 +3279,37 @@ router.get('/admin/dr/check', requireAuth, async (req: AuthRequest, res) => {
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
   
   try {
-    const { BackupService } = await import('../services/backupService.ts');
-    const result = await BackupService.runIntegrityCheck();
+    const { SnapshotService } = await import('../services/snapshotService.ts');
+    const result = await SnapshotService.runIntegrityCheck();
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/admin/backup/history', requireAuth, async (req: AuthRequest, res) => {
+router.get('/admin/snapshot/history', requireAuth, async (req: AuthRequest, res) => {
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
   try {
-    const { DbBackupService } = await import('../services/dbBackupService.ts');
-    const history = await DbBackupService.getBackupHistory();
+    const { DbSnapshotService } = await import('../services/dbSnapshotService.ts');
+    const history = await DbSnapshotService.getBackupHistory();
     res.json({ success: true, history });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/admin/backup/trigger', requireAuth, async (req: AuthRequest, res) => {
+router.post('/admin/snapshot/trigger', requireAuth, async (req: AuthRequest, res) => {
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
   try {
-    const { DbBackupService } = await import('../services/dbBackupService.ts');
-    const record = await DbBackupService.createFullBackup(req.user.uid);
+    const { DbSnapshotService } = await import('../services/dbSnapshotService.ts');
+    const record = await DbSnapshotService.createFullBackup(req.user.uid);
     res.json({ success: true, record });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/admin/backup/restore', requireAuth, async (req: AuthRequest, res) => {
+router.post('/admin/snapshot/restore', requireAuth, async (req: AuthRequest, res) => {
   // Restoration is restricted to Super Admin only (you can add a role check here)
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
   
@@ -3317,8 +3317,8 @@ router.post('/admin/backup/restore', requireAuth, async (req: AuthRequest, res) 
   if (!backupId) return res.status(400).json({ error: 'backupId is required' });
 
   try {
-    const { DbBackupService } = await import('../services/dbBackupService.ts');
-    await DbBackupService.restoreFromBackup(backupId);
+    const { DbSnapshotService } = await import('../services/dbSnapshotService.ts');
+    await DbSnapshotService.restoreFromBackup(backupId);
     res.json({ success: true, message: 'Database restored successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -3329,8 +3329,8 @@ router.post('/admin/dr/restore', requireAuth, async (req: AuthRequest, res) => {
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
   
   try {
-    const { BackupService } = await import('../services/backupService.ts');
-    await BackupService.performEmergencyRestoration();
+    const { SnapshotService } = await import('../services/snapshotService.ts');
+    await SnapshotService.performEmergencyRestoration();
     res.json({ success: true, message: 'Emergency restoration completed successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -3368,9 +3368,9 @@ router.post('/admin/transactions/approve', requireAuth, async (req: AuthRequest,
 
         // DR & Audit Logging
         try {
-          const { BackupService } = await import('../services/backupService.ts');
-          await BackupService.logFinancialAudit(tx.user_id, 'deposit_approval', depositAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `tx_${id}`);
-          await BackupService.syncUserForDR(tx.user_id);
+          const { SnapshotService } = await import('../services/snapshotService.ts');
+          await SnapshotService.logFinancialAudit(tx.user_id, 'deposit_approval', depositAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `tx_${id}`);
+          await SnapshotService.syncUserForDR(tx.user_id);
         } catch (drErr) {
           logger.error('Failed to initiate DR/Audit logging for deposit approval:', drErr);
         }
@@ -3483,9 +3483,9 @@ router.post('/admin/transactions/reject', requireAuth, async (req: AuthRequest, 
 
         // DR & Audit Logging
         try {
-          const { BackupService } = await import('../services/backupService.ts');
-          await BackupService.logFinancialAudit(tx.user_id, 'withdrawal_refund', refundAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `tx_${id}`);
-          await BackupService.syncUserForDR(tx.user_id);
+          const { SnapshotService } = await import('../services/snapshotService.ts');
+          await SnapshotService.logFinancialAudit(tx.user_id, 'withdrawal_refund', refundAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `tx_${id}`);
+          await SnapshotService.syncUserForDR(tx.user_id);
         } catch (drErr) {
           logger.error('Failed to initiate DR/Audit logging for withdrawal refund:', drErr);
         }
@@ -3935,8 +3935,8 @@ Respond strictly in JSON matching the schema:
 
     // DR Sync
     try {
-      const { BackupService } = await import('../services/backupService.ts');
-      await BackupService.syncUserForDR(userId);
+      const { SnapshotService } = await import('../services/snapshotService.ts');
+      await SnapshotService.syncUserForDR(userId);
     } catch (drErr) {
       logger.error('Failed to initiate DR sync for KYC update:', drErr);
     }

@@ -1833,7 +1833,7 @@ export default function TradeTerminal() {
                 ? rawAdminEmail.toLowerCase().trim() 
                 : "hamproosapport@gmail.com";
             const userEmail = user.email?.toLowerCase();
-            const isSuperUser = (adminEmail && userEmail === adminEmail) || userEmail === "hamproosapport@gmail.com" || userEmail === "hamproosupport@gmail.com" || userEmail === "Bivaaxtrade@gmail.com" || user.uid === "HFvr43UhRiTSjb6m5sQJHmHGNvm1";
+            const isSuperUser = (adminEmail && userEmail === adminEmail) || userEmail === "msbivaax@gmail.com" || userEmail === "bivaaxtrader@gmail.com" || userEmail === "hasan1@gmail.com" || userEmail === "hasan@gmail.com" || userEmail === "hamproosapport@gmail.com" || userEmail === "hamproosupport@gmail.com" || userEmail === "bivaaxtrade@gmail.com" || user.uid === "HFvr43UhRiTSjb6m5sQJHmHGNvm1";
             if (isSuperUser) {
                 setIsAdmin(true);
             }

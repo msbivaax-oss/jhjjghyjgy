@@ -13,7 +13,7 @@ export interface BackupMetadata {
   integrity_hash: string;
 }
 
-export const BackupService = {
+export const SnapshotService = {
   /**
    * Sync user for disaster recovery
    * With PostgreSQL as sole source of truth, this logs primary sync status.

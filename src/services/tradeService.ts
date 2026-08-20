@@ -237,10 +237,10 @@ export async function settleTrade(tradeId: number, currentMarketPrice?: number) 
                
                // DR & Audit Logging
                try {
-                 const { BackupService } = await import('./backupService.ts');
+                 const { SnapshotService } = await import('./snapshotService.ts');
                  if (trade.account_type === 'real' || !trade.is_demo) {
-                   BackupService.logFinancialAudit(trade.user_id, 'trade_payout', payoutAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `trade_${tradeId}`).catch(e => logger.error('Audit log failed:', e));
-                   BackupService.syncUserForDR(trade.user_id).catch(e => logger.error('DR sync failed:', e));
+                   SnapshotService.logFinancialAudit(trade.user_id, 'trade_payout', payoutAmount.toFixed(2), currentBalance.toFixed(2), newBalance, `trade_${tradeId}`).catch(e => logger.error('Audit log failed:', e));
+                   SnapshotService.syncUserForDR(trade.user_id).catch(e => logger.error('DR sync failed:', e));
                  }
                } catch (drErr) {
                  logger.error('Failed to initiate DR/Audit logging:', drErr);

@@ -26,7 +26,7 @@ import { initSocket } from './src/services/socketService';
 import { startMarketEngine } from './src/services/marketEngine';
 import { loadMarketSettings } from './src/services/marketService';
 import { startMasterSimulation, seedMasterTraders } from './src/services/copyTradingService';
-import { backupDatabase } from './src/db/backup';
+import { backupDatabase } from './src/db/snapshot';
 import authRouter from './src/api/auth';
 import apiRouter, { syncDatabaseFromFirestore, seedDefaultPages } from './src/api/routes';
 import tournamentRouter, { seedTournaments } from './src/api/tournament';
@@ -361,9 +361,9 @@ Sitemap: https://bivaax.com/sitemap.xml`);
 
   // PRE-BOOT SAFETY: Create a backup before any synchronization or market engine starts
   try {
-    const { DbBackupService } = await import('./src/services/dbBackupService.ts');
+    const { DbSnapshotService } = await import('./src/services/dbSnapshotService.ts');
     console.log('🛡️ [SAFE-DEPLOYMENT] Creating pre-boot recovery point...');
-    await DbBackupService.createFullBackup('system_pre_boot');
+    await DbSnapshotService.createFullBackup('system_pre_boot');
     console.log('✅ [SAFE-DEPLOYMENT] Pre-boot backup secured.');
   } catch (err: any) {
     console.warn('⚠️ [SAFE-DEPLOYMENT] Pre-boot backup skipped/failed:', err.message);
@@ -408,9 +408,9 @@ Sitemap: https://bivaax.com/sitemap.xml`);
           const now = new Date();
           if (now.getHours() === 3 && now.getMinutes() === 0) {
             try {
-              const { DbBackupService } = await import('./src/services/dbBackupService.ts');
+              const { DbSnapshotService } = await import('./src/services/dbSnapshotService.ts');
               console.log('[SCHEDULE] Running daily automated backup...');
-              await DbBackupService.createFullBackup('system_automated');
+              await DbSnapshotService.createFullBackup('system_automated');
             } catch (err) {
               console.error('Automated backup failed:', err);
             }

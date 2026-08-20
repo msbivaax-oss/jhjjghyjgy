@@ -13,7 +13,7 @@ interface BackupRecord {
   created_by: string;
 }
 
-export const AdminBackupView: React.FC = () => {
+export const AdminSnapshotView: React.FC = () => {
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
@@ -22,7 +22,7 @@ export const AdminBackupView: React.FC = () => {
   const fetchBackups = async () => {
     try {
       const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/admin/backup/history', {
+      const res = await fetch('/api/admin/snapshot/history', {
         headers: { 'Authorization': `Bearer ${idToken}` }
       });
       const data = await res.json();
@@ -49,7 +49,7 @@ export const AdminBackupView: React.FC = () => {
     setTriggering(true);
     try {
       const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/admin/backup/trigger', {
+      const res = await fetch('/api/admin/snapshot/trigger', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${idToken}` }
       });
@@ -74,7 +74,7 @@ export const AdminBackupView: React.FC = () => {
     setRestoring(backupId);
     try {
       const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/admin/backup/restore', {
+      const res = await fetch('/api/admin/snapshot/restore', {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${idToken}`,

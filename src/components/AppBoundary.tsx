@@ -41,12 +41,21 @@ export default class AppBoundary extends Component<Props, State> {
       if (this.props.fallback) {
         return this.props.fallback;
       }
+      const isChunkError = 
+        this.state.error?.message?.includes("Failed to fetch dynamically imported module") ||
+        this.state.error?.message?.includes("Importing a module script failed") ||
+        this.state.error?.message?.includes("Failed to load module script");
+
       return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center bg-[#1c1d22]">
           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-8 max-w-xl">
-            <h2 className="text-xl font-bold text-red-500 mb-4 tracking-tight">Application Error</h2>
+            <h2 className="text-xl font-bold text-red-500 mb-4 tracking-tight">
+              {isChunkError ? "Module Reload Required" : "Application Error"}
+            </h2>
             <p className="text-gray-400 text-sm mb-4">
-              We encountered an unexpected error while rendering this component.
+              {isChunkError 
+                ? "A system update or network refresh occurred. Reloading will fetch the latest module."
+                : "We encountered an unexpected error while rendering this component."}
             </p>
             <div className="bg-black/50 p-4 rounded-xl overflow-auto max-h-[200px] text-left">
               <code className="text-xs text-red-400 font-mono">
@@ -54,7 +63,10 @@ export default class AppBoundary extends Component<Props, State> {
               </code>
             </div>
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                this.setState({ hasError: false, error: undefined });
+                window.location.reload();
+              }}
               className="mt-6 bg-[#323338] hover:bg-[#3A3C42] text-white px-6 py-2 rounded-xl transition-colors text-sm font-bold"
             >
               Reload Page
