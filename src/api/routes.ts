@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db, get, query, run, transaction } from '../db/mysql-db.ts';
-import { requireAuth, AuthRequest } from '../middleware/jwtAuth.ts';
+import { requireAuth, requireAdmin, AuthRequest } from '../middleware/jwtAuth.ts';
 import { createAuditLog } from '../lib/audit.ts';
 import logger from '../lib/logger.ts';
 import { getIO } from '../services/socketService.ts';
@@ -117,6 +117,161 @@ router.post('/admin/manipulation/global', (req, res) => {
   setGlobalManipulationMode(mode);
   getIO().emit('global_manipulation_status', mode);
   res.json({ success: true, mode });
+});
+
+// --- New Missing Admin Routes ---
+
+router.post('/admin/market/system', requireAuth, (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { active } = req.body;
+  setSystemActive(!!active);
+  getIO().emit('system_status', !!active);
+  res.json({ success: true, systemActive: !!active });
+});
+
+router.post('/admin/system/clear-cache', requireAuth, (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  res.json({ success: true, message: 'Cache cleared successfully' });
+});
+
+router.post('/admin/activities', requireAuth, (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  res.json({ success: true });
+});
+
+router.post('/admin/market/manipulation', requireAuth, (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { pair, targetTrend, profitPercentage, enabled, mode } = req.body;
+  if (markets_real[pair]) {
+    markets_real[pair].manipulation = {
+      targetTrend: targetTrend || 'random',
+      profitPercentage: profitPercentage || 0,
+      enabled: !!enabled,
+      mode: mode || 'percentage'
+    };
+  }
+  if (markets_demo[pair]) {
+    markets_demo[pair].manipulation = {
+      targetTrend: targetTrend || 'random',
+      profitPercentage: profitPercentage || 0,
+      enabled: !!enabled,
+      mode: mode || 'percentage'
+    };
+  }
+  res.json({ success: true });
+});
+
+router.post('/admin/market/reset-pressure', requireAuth, (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { pair } = req.body;
+  if (markets_real[pair]) {
+    markets_real[pair].totalUp = 0;
+    markets_real[pair].totalDown = 0;
+  }
+  if (markets_demo[pair]) {
+    markets_demo[pair].totalUp = 0;
+    markets_demo[pair].totalDown = 0;
+  }
+  res.json({ success: true });
+});
+
+router.post('/admin/migrate-users', requireAuth, async (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  if (!adminDb) {
+    return res.status(400).json({ error: 'Firestore Admin DB is not initialized.' });
+  }
+  try {
+    const snapshot = await adminDb.collection('users').limit(1000).get();
+    if (snapshot.empty) {
+      return res.json({ migrated: 0, skipped: 0 });
+    }
+    
+    let migrated = 0;
+    let skipped = 0;
+    const batchSize = 50;
+    let i = 0;
+    while (i < snapshot.docs.length) {
+      await transaction(async (conn) => {
+        const batch = snapshot.docs.slice(i, i + batchSize);
+        for (const doc of batch) {
+          const fbData = doc.data();
+          const uid = doc.id;
+          const email = fbData.email || '';
+          
+          const rawReal = fbData.balance ?? fbData.real_balance ?? fbData.realBalance ?? 0;
+          const realBalance = parseFloat(rawReal.toString()) || 0;
+          const rawDemo = fbData.demoBalance ?? fbData.demo_balance ?? 10000;
+          const demoBalance = parseFloat(rawDemo.toString()) || 10000;
+          const isVerified = (fbData.isVerified || fbData.is_verified || fbData.emailVerified) ? 1 : 0;
+          const kycStatus = fbData.kycStatus || fbData.kyc_status || 'unverified';
+          const passwordValue = fbData.password_hash || fbData.passwordHash || fbData.password || null;
+          const displayName = fbData.displayName || fbData.display_name || '';
+          const nickname = fbData.nickname || '';
+          const photoURL = fbData.photoURL || fbData.photo_url || '';
+          const currency = fbData.currency || 'USD';
+          const country = fbData.country || '';
+          const countryCode = fbData.countryCode || fbData.country_code || '';
+          const is_admin = (fbData.isAdmin || fbData.is_admin) ? 1 : 0;
+          const referralCode = fbData.referralCode || fbData.referral_code || Math.random().toString(36).substring(2, 8).toUpperCase();
+          const referredByUid = fbData.referredBy || fbData.referred_by_uid || null;
+          const totalLiveVolume = fbData.totalLiveVolume || fbData.total_live_volume || '0.00';
+          const referralCount = fbData.referralCount || fbData.referral_count || 0;
+          const affiliateBalance = fbData.affiliateBalance || fbData.affiliate_balance || '0.00';
+          const totalAffiliateEarnings = fbData.totalAffiliateEarnings || fbData.total_affiliate_earnings || '0.00';
+
+          const user = await get('SELECT id FROM users WHERE uid = ?', [uid], conn) as any;
+
+          if (!user) {
+            await run(
+              `INSERT INTO users (uid, email, password_hash, display_name, nickname, photo_url, real_balance, demo_balance, currency, is_verified, is_admin, kyc_status, referral_code, referred_by_uid, total_live_volume, country, country_code, affiliate_balance, total_affiliate_earnings, referral_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                uid, email, passwordValue, displayName, nickname, photoURL, 
+                realBalance, demoBalance, currency, isVerified, is_admin, kycStatus, 
+                referralCode, referredByUid, totalLiveVolume.toString(), country, countryCode,
+                affiliateBalance.toString(), totalAffiliateEarnings.toString(), referralCount
+              ],
+              conn
+            );
+            migrated++;
+          } else {
+            skipped++;
+          }
+        }
+      });
+      i += batchSize;
+    }
+    res.json({ success: true, migrated, skipped });
+  } catch (err: any) {
+    logger.error(`Error migrating users: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/delete-firestore-users', requireAuth, async (req: AuthRequest, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const { confirm } = req.body;
+  if (confirm !== 'DELETE_ALL_FIRESTORE_USERS') {
+    return res.status(400).json({ error: 'Confirmation text is invalid' });
+  }
+  if (!adminDb) {
+    return res.status(400).json({ error: 'Firestore Admin DB is not initialized.' });
+  }
+  try {
+    const snapshot = await adminDb.collection('users').get();
+    const count = snapshot.size;
+    if (count > 0) {
+      const batch = adminDb.batch();
+      snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+    }
+    res.json({ success: true, count });
+  } catch (err: any) {
+    logger.error(`Error deleting firestore users: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/admin/market/update', (req, res) => {

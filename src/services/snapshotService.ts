@@ -34,10 +34,11 @@ export const SnapshotService = {
   async logFinancialAudit(uid: string, type: string, amount: string, oldBalance: string, newBalance: string, referenceId: string) {
     try {
       // Write to SQL audit_logs table
+      const detailsObj = { amount, oldBalance, newBalance, referenceId };
       await run(
-        `INSERT INTO audit_logs (user_id, type, amount, old_balance, new_balance, reference_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [uid, type, amount, oldBalance, newBalance, referenceId, Date.now()]
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [uid, type, 'financial', referenceId, JSON.stringify(detailsObj), Date.now()]
       );
       
       logger.info(`[FINANCIAL-AUDIT] Recorded ${type} for user ${uid} of ${amount} in PostgreSQL.`);

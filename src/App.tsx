@@ -531,13 +531,26 @@ export default function App() {
         if (u && !syncInProgress) {
           syncInProgress = true;
           
+          const token = await u.getIdToken();
+          const authHeaders = { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          };
+
           // Wait a bit to allow server to settle
           await new Promise(resolve => setTimeout(resolve, 2000));
           
           const safeFetch = async (url: string, options?: RequestInit, retries = 3) => {
+            const mergedOptions = {
+              ...options,
+              headers: {
+                ...authHeaders,
+                ...options?.headers
+              }
+            };
             for (let i = 0; i < retries; i++) {
               try {
-                const res = await fetch(url, options);
+                const res = await fetch(url, mergedOptions);
                 const contentType = res.headers.get('content-type');
                 
                 if (res.status === 429) {
@@ -591,7 +604,6 @@ export default function App() {
           console.log("Starting user sync...");
           safeFetch('/api/user/sync', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               uid: u.uid,
               email: u.email,

@@ -1601,11 +1601,15 @@ export default function TradeTerminal() {
           const maxRetries = 3;
           let delay = 500;
 
+          const token = await user.getIdToken().catch(() => "") || localStorage.getItem('bivax_token') || "";
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
               const response = await fetch('/api/user/sync', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify(payload),
                 signal: controller.signal
               });
@@ -1724,9 +1728,13 @@ export default function TradeTerminal() {
             }
 
             try {
+                const token = await user.getIdToken().catch(() => "") || localStorage.getItem('bivax_token') || "";
                 const res = await fetch('/api/user/sync', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL })
                 });
                 
@@ -4344,7 +4352,10 @@ const PROMOTED_ARTICLES = [
             // Re-sync user to update real balance
             const syncRes = await fetch('/api/user/sync', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ uid: auth.currentUser?.uid })
             });
             if (syncRes.ok) {
@@ -7086,9 +7097,13 @@ const PROMOTED_ARTICLES = [
     
     if (auth.currentUser) {
       try {
+        const token = await auth.currentUser.getIdToken().catch(() => "") || localStorage.getItem('bivax_token') || "";
         const response = await fetch('/api/trade', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({
             pair: activeAsset,
             amount: baseAmount,
@@ -7113,7 +7128,10 @@ const PROMOTED_ARTICLES = [
                 console.log("User missing on server, attempting emergency sync...");
                 await fetch('/api/user/sync', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
                   body: JSON.stringify({ 
                     uid: auth.currentUser.uid, 
                     email: auth.currentUser.email, 

@@ -1,4 +1,4 @@
-import { query, run, runRawSql } from '../db/mysql-db.ts';
+import { query, run, runRawSql, getDbType } from '../db/mysql-db.ts';
 import logger from '../lib/logger.ts';
 import fs from 'fs';
 import path from 'path';
@@ -46,26 +46,36 @@ export const DbSnapshotService = {
     const postgresUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.PG_URL;
 
     try {
-      // 1. Try backup using pg_dump if DATABASE_URL is available
-      if (postgresUrl) {
+      // 1. Try backup using pg_dump if DATABASE_URL is available and we are active on Postgres
+      if (postgresUrl && getDbType() === 'pg') {
         try {
           logger.info(`[BACKUP] Executing pg_dump for backup...`);
           await execPromise(`pg_dump "${postgresUrl}" -f "${filePath}"`);
           usedPgDump = true;
           logger.info(`[BACKUP-SUCCESS] pg_dump completed successfully.`);
         } catch (pgErr: any) {
-          logger.warn(`[BACKUP-FALLBACK] pg_dump failed/not found: ${pgErr.message}. Falling back to logical SQL dumper.`);
+          logger.info(`[BACKUP-FALLBACK] pg_dump failed/not found: ${pgErr.message}. Falling back to logical SQL dumper.`);
         }
       }
 
       // 2. Fallback to logical SQL dumper if pg_dump is not available or failed
       if (!usedPgDump) {
-        // Get all tables in public schema
-        const tablesResult = await query(
-          "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
-        ) as any[];
+        let tables: string[] = [];
         
-        const tables = tablesResult.map(t => t.table_name);
+        if (getDbType() === 'pg') {
+          // Get all tables in public schema for PostgreSQL
+          const tablesResult = await query(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+          ) as any[];
+          tables = tablesResult.map(t => t.table_name);
+        } else {
+          // Get all tables for SQLite
+          const tablesResult = await query(
+            "SELECT name as table_name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+          ) as any[];
+          tables = tablesResult.map(t => t.table_name);
+        }
+        
         tablesCount = tables.length;
 
         let sqlDump = `-- Bivaax Trade Enterprise Backup (Logical Fallback)\n`;
@@ -109,10 +119,17 @@ export const DbSnapshotService = {
       } else {
         // If pg_dump succeeded, get tables count from system catalogs
         try {
-          const countRes = await query(
-            "SELECT count(*)::int as cnt FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
-          ) as any[];
-          tablesCount = countRes[0]?.cnt || 0;
+          if (getDbType() === 'pg') {
+            const countRes = await query(
+              "SELECT count(*)::int as cnt FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
+            ) as any[];
+            tablesCount = countRes[0]?.cnt || 0;
+          } else {
+            const countRes = await query(
+              "SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ) as any[];
+            tablesCount = countRes[0]?.cnt || 0;
+          }
         } catch (e) {
           tablesCount = 15; // default fallback count estimate
         }
@@ -135,9 +152,9 @@ export const DbSnapshotService = {
       // 5. Store detailed entry in audit logs
       const detailsStr = `Database backup created successfully: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB). Type: ${usedPgDump ? 'pg_dump' : 'logical_dumper'}. Synced to secure off-site backup storage.`;
       await run(
-        `INSERT INTO audit_logs (user_id, type, amount, old_balance, new_balance, reference_id, details, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminId, 'DATABASE_BACKUP', 0, 0, 0, backupId, detailsStr, timestamp]
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [adminId, 'DATABASE_BACKUP', 'system_backup', backupId, detailsStr, timestamp]
       );
 
       logger.info(`[BACKUP-SUCCESS] Backup ${backupId} completed. Size: ${(stats.size / 1024).toFixed(2)} KB`);
