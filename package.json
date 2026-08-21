@@ -10,11 +10,10 @@
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=2048' tsx server.ts",
     "build": "mkdir -p dist && NODE_OPTIONS='--max-old-space-size=2048' vite build && NODE_OPTIONS='--max-old-space-size=2048' esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs > /tmp/server.log 2>&1",
+    "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "test": "vitest run src/tests/otcEngine.test.ts",
-    "lint": "tsc --noEmit",
-    "diagnose": "tsx check-connections.ts"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.17.0",

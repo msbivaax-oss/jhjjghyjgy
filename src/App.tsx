@@ -92,6 +92,7 @@ const RequireAuth = ({ children, user, loading }: { children: React.ReactNode; u
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
   const [tfaRequired, setTfaRequired] = useState(false);
   const [tfaPassed, setTfaPassed] = useState(false);
   const [tfaCode, setTfaCode] = useState('');
@@ -522,39 +523,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    console.log("[App] Auth listener initializing...");
     let syncInProgress = false;
     
+    // Safety timeout: ensure loading is dismissed even if auth or sync hangs
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("[App] Loading safety timeout reached (10s). Forcing loading to false.");
+        setLoading(false);
+      }
+    }, 10000);
+    
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      console.log("[App] Auth state changed:", u ? `User ${u.uid}` : "No user");
       try {
         setUser(u);
         
         if (u && !syncInProgress) {
           syncInProgress = true;
-          
-          const token = await u.getIdToken();
-          const authHeaders = { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          };
-
-          // Wait a bit to allow server to settle
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log("[App] Starting user synchronization flow...");
           
           const safeFetch = async (url: string, options?: RequestInit, retries = 3) => {
-            const mergedOptions = {
-              ...options,
-              headers: {
-                ...authHeaders,
-                ...options?.headers
-              }
-            };
+            console.log(`[App] Fetching ${url}...`);
             for (let i = 0; i < retries; i++) {
               try {
-                const res = await fetch(url, mergedOptions);
+                const res = await fetch(url, options);
                 const contentType = res.headers.get('content-type');
                 
                 if (res.status === 429) {
-                   console.warn(`Rate limit hit for ${url}. Attempt ${i+1}.`);
+                   console.warn(`[App] Rate limit hit for ${url}. Attempt ${i+1}.`);
                    if (i < retries - 1) {
                      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
                      continue;
@@ -563,14 +560,17 @@ export default function App() {
                 }
 
                 if (contentType && contentType.includes('application/json')) {
-                  return await res.json();
+                  const json = await res.json();
+                  console.log(`[App] ${url} JSON response received`);
+                  return json;
                 } else {
                   const text = await res.text();
+                  console.log(`[App] ${url} Text response received`);
                   if (res.ok) return { success: true, data: text };
                   return { error: 'Invalid response format', status: res.status, raw: text };
                 }
               } catch (e: any) {
-                console.error(`Fetch attempt ${i+1} failed for ${url}:`, e.message);
+                console.error(`[App] Fetch attempt ${i+1} failed for ${url}:`, e.message);
                 if (i < retries - 1) {
                   await new Promise(r => setTimeout(r, 1000 * (i + 1)));
                   continue;
@@ -581,29 +581,28 @@ export default function App() {
           };
 
           // Health check with retry
-          console.log("Starting health check...");
+          console.log("[App] Starting API health check...");
           let healthData = { status: 'pending' };
-          for (let i = 0; i < 5; i++) {
+          for (let i = 0; i < 2; i++) {
             const data = await safeFetch('/api/health');
             if (data && data.status === 'ok') {
               healthData = data;
+              console.log("[App] API Health check OK");
               break;
             }
-            console.warn(`Health check attempt ${i+1} failed, retrying...`);
-            await new Promise(r => setTimeout(r, 1000));
+            console.warn(`[App] Health check attempt ${i+1} failed, retrying...`);
+            await new Promise(r => setTimeout(r, 500));
           }
 
           if (healthData.status !== 'ok') {
-              console.warn("Health check failed after multiple attempts, proceeding with caution...");
-          } else {
-              console.log("Health check successful");
+              console.warn("[App] Health check failed after multiple attempts, proceeding with caution...");
           }
-          console.log("Proceeding with user sync");
 
           // Sync user
-          console.log("Starting user sync...");
+          console.log("[App] Starting backend user sync...");
           safeFetch('/api/user/sync', {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               uid: u.uid,
               email: u.email,
@@ -614,17 +613,21 @@ export default function App() {
               referralType: localStorage.getItem('referralType')
             })
           }).then(data => {
-            console.log("User sync response:", data);
-            if (data.success) console.log("Initial user sync successful");
-            else console.error("Initial user sync failed:", data);
+            console.log("[App] User sync result:", data);
+            if (data.success) console.log("[App] Initial user sync successful");
+            else console.error("[App] Initial user sync failed:", data);
+          }).catch(err => {
+            console.error("[App] User sync unhandled error:", err);
           }).finally(() => {
             syncInProgress = false;
           });
 
           // Check 2FA
+          console.log("[App] Checking 2FA status...");
           try {
             const data = await safeFetch(`/api/user/check-2fa?uid=${u.uid}`);
             if (data && !data.error) {
+              console.log("[App] 2FA status received from server:", data.tfaEnabled);
               if (data.tfaEnabled) {
                 const hasPassed = sessionStorage.getItem(`tfa_passed_${u.uid}`);
                 if (!hasPassed) {
@@ -641,11 +644,15 @@ export default function App() {
               throw new Error(data?.error || "Server check failed");
             }
           } catch (err) {
-            console.warn("Server 2FA check failed, falling back to direct Firestore...");
+            console.warn("[App] Server 2FA check failed, falling back to direct Firestore...");
             try {
-               const userSnap = await getDoc(doc(db, 'users', u.uid));
+               const userSnap: any = await Promise.race([
+                 getDoc(doc(db, 'users', u.uid)),
+                 new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore timeout")), 3000))
+               ]);
                if (userSnap.exists()) {
                   const data = userSnap.data();
+                  console.log("[App] 2FA status from Firestore:", data.tfaEnabled);
                   if (data.tfaEnabled) {
                      const hasPassed = sessionStorage.getItem(`tfa_passed_${u.uid}`);
                      if (!hasPassed) {
@@ -660,18 +667,22 @@ export default function App() {
                   }
                }
             } catch (directErr) {
+               console.error("[App] Direct Firestore 2FA check failed:", directErr);
                setTfaRequired(false);
             }
           }
         } else if (!u) {
+          console.log("[App] Clearing user session state");
           setTfaRequired(false);
           setTfaPassed(false);
           setTfaSecretBase32(null);
         }
       } catch (err) {
-        console.error("Error in onAuthStateChanged auth callback handler:", err);
+        console.error("[App] Critical error in onAuthStateChanged handler:", err);
       } finally {
+        console.log("[App] Finalizing auth state, setting loading=false");
         if (loading !== false) setLoading(false);
+        clearTimeout(loadingTimeout);
       }
     });
 
@@ -737,8 +748,41 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] bg-[#101115] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#FFE24C]"></div>
+      <div className="min-h-[100dvh] bg-[#101115] flex flex-col items-center justify-center p-6 text-center">
+        <div className="relative mb-8">
+          <div className="w-12 h-12 border-4 border-[#FFE24C]/20 border-t-[#FFE24C] rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-2 h-2 bg-[#FFE24C] rounded-full animate-pulse"></div>
+          </div>
+        </div>
+        
+        <div className="max-w-md">
+          <h2 className="text-white font-black text-xl mb-2 tracking-tight">Initializing Bivaax</h2>
+          <p className="text-gray-400 text-sm leading-relaxed mb-6">
+            Establishing secure connection and verifying session...
+          </p>
+          
+          <div className="space-y-4">
+             <div className="bg-[#1c1d22] border border-white/5 rounded-2xl p-4 flex items-start gap-3 text-left">
+                <div className="w-5 h-5 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                   <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                </div>
+                <div>
+                   <p className="text-[11px] text-gray-300 font-bold mb-0.5 uppercase tracking-wider">Connection Notice</p>
+                   <p className="text-[11px] text-gray-500 leading-snug">
+                      If you see a <b>network-request-failed</b> error, please ensure you aren't behind a restrictive VPN or firewall blocking Google Firebase services.
+                   </p>
+                </div>
+             </div>
+             
+             <button 
+                onClick={() => window.location.reload()}
+                className="text-[#FFE24C] text-[11px] font-black uppercase tracking-[0.2em] hover:text-white transition-colors"
+             >
+                Force Reload Page
+             </button>
+          </div>
+        </div>
       </div>
     );
   }

@@ -11,7 +11,10 @@ import {
   sendPasswordResetEmail as fbSendPasswordResetEmail,
   sendEmailVerification as fbSendEmailVerification,
   reauthenticateWithCredential as fbReauthenticateWithCredential,
-  EmailAuthProvider as FbEmailAuthProvider
+  EmailAuthProvider as FbEmailAuthProvider,
+  browserLocalPersistence,
+  setPersistence,
+  initializeAuth
 } from "firebase/auth";
 
 import { 
@@ -32,7 +35,22 @@ import firebaseConfig from "../firebase-applet-config.json";
 
 // Initialize Firebase
 const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
-const realFirebaseAuth = getAuth(firebaseApp);
+
+// Use initializeAuth with persistence for more stability in iframe/preview environments
+let realFirebaseAuth: any;
+try {
+  realFirebaseAuth = getAuth(firebaseApp);
+  // Ensure persistence is set to local
+  setPersistence(realFirebaseAuth, browserLocalPersistence).catch(err => {
+    console.warn("Firebase persistence setup warning:", err);
+  });
+} catch (e) {
+  console.error("Firebase Auth initialization failed, attempting fallback:", e);
+  realFirebaseAuth = initializeAuth(firebaseApp, {
+    persistence: browserLocalPersistence
+  });
+}
+
 export const dbInstance = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
 // Test connection
@@ -44,6 +62,12 @@ async function testConnection() {
     // Suppress confusing client-side direct firestore connection logs
     // since the client successfully routes all persistent state via server-proxied API endpoints.
     console.debug("Firebase direct client connection check status:", error.message || error);
+    
+    // If we see network-request-failed, it's a hint that the client's network/ISP or browser 
+    // might be blocking Google services.
+    if (error.message?.includes('network-request-failed') || error.code === 'auth/network-request-failed') {
+      console.error("CRITICAL: Firebase network request failed. This usually means Google services are being blocked by your network, browser extension, or ISP.");
+    }
   }
 }
 testConnection();
@@ -56,48 +80,56 @@ export const auth = {
     return realFirebaseAuth.currentUser;
   },
   onAuthStateChanged: (callback: (user: any) => void) => {
-    return realFirebaseAuth.onAuthStateChanged(async (fbUser) => {
-      if (fbUser) {
-        // If we have a Firebase user but no local token, or if we want to ensure freshness
-        const localUser = localStorage.getItem('bivax_user');
-        const localToken = localStorage.getItem('bivax_token');
-        
-        if (!localToken || !localUser) {
-          try {
-            const token = await fbUser.getIdToken();
-            const res = await fetch('/api/auth/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token })
-            });
-            if (res.ok) {
-              const data = await res.json();
-              saveAuth(data.token, data.user);
-              callback({
-                ...data.user,
-                uid: fbUser.uid,
-                email: fbUser.email,
-                getIdToken: (forceRefresh?: boolean) => fbUser.getIdToken(forceRefresh)
+    return realFirebaseAuth.onAuthStateChanged(
+      async (fbUser: any) => {
+        if (fbUser) {
+          // If we have a Firebase user but no local token, or if we want to ensure freshness
+          const localUser = localStorage.getItem('bivax_user');
+          const localToken = localStorage.getItem('bivax_token');
+          
+          if (!localToken || !localUser) {
+            try {
+              const token = await fbUser.getIdToken();
+              const res = await fetch('/api/auth/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
               });
-              return;
+              if (res.ok) {
+                const data = await res.json();
+                saveAuth(data.token, data.user);
+                callback({
+                  ...data.user,
+                  uid: fbUser.uid,
+                  email: fbUser.email,
+                  getIdToken: (forceRefresh?: boolean) => fbUser.getIdToken(forceRefresh)
+                });
+                return;
+              }
+            } catch (e) {
+              console.error("Auth sync failed on state change:", e);
             }
-          } catch (e) {
-            console.error("Auth sync failed on state change:", e);
           }
+          
+          const user = localUser ? JSON.parse(localUser) : null;
+          callback(fbUser ? {
+            ...user,
+            uid: fbUser.uid,
+            email: fbUser.email,
+            getIdToken: (forceRefresh?: boolean) => fbUser.getIdToken(forceRefresh)
+          } : null);
+        } else {
+          clearAuth();
+          callback(null);
         }
-        
-        const user = localUser ? JSON.parse(localUser) : null;
-        callback(fbUser ? {
-          ...user,
-          uid: fbUser.uid,
-          email: fbUser.email,
-          getIdToken: (forceRefresh?: boolean) => fbUser.getIdToken(forceRefresh)
-        } : null);
-      } else {
-        clearAuth();
+      },
+      (error: any) => {
+        console.error("Firebase onAuthStateChanged error:", error);
+        // If auth fails to even check state, we should probably tell the app
+        // so it can at least show a login screen or a useful error.
         callback(null);
       }
-    });
+    );
   },
   signOut: async () => {
     await realFirebaseAuth.signOut();

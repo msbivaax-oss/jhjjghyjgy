@@ -2,7 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db, get, query, run, transaction } from '../db/mysql-db.ts';
-import { requireAuth, requireAdmin, AuthRequest } from '../middleware/jwtAuth.ts';
+import { requireAuth, AuthRequest } from '../middleware/jwtAuth.ts';
 import { createAuditLog } from '../lib/audit.ts';
 import logger from '../lib/logger.ts';
 import { getIO } from '../services/socketService.ts';
@@ -117,161 +117,6 @@ router.post('/admin/manipulation/global', (req, res) => {
   setGlobalManipulationMode(mode);
   getIO().emit('global_manipulation_status', mode);
   res.json({ success: true, mode });
-});
-
-// --- New Missing Admin Routes ---
-
-router.post('/admin/market/system', requireAuth, (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  const { active } = req.body;
-  setSystemActive(!!active);
-  getIO().emit('system_status', !!active);
-  res.json({ success: true, systemActive: !!active });
-});
-
-router.post('/admin/system/clear-cache', requireAuth, (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  res.json({ success: true, message: 'Cache cleared successfully' });
-});
-
-router.post('/admin/activities', requireAuth, (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  res.json({ success: true });
-});
-
-router.post('/admin/market/manipulation', requireAuth, (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  const { pair, targetTrend, profitPercentage, enabled, mode } = req.body;
-  if (markets_real[pair]) {
-    markets_real[pair].manipulation = {
-      targetTrend: targetTrend || 'random',
-      profitPercentage: profitPercentage || 0,
-      enabled: !!enabled,
-      mode: mode || 'percentage'
-    };
-  }
-  if (markets_demo[pair]) {
-    markets_demo[pair].manipulation = {
-      targetTrend: targetTrend || 'random',
-      profitPercentage: profitPercentage || 0,
-      enabled: !!enabled,
-      mode: mode || 'percentage'
-    };
-  }
-  res.json({ success: true });
-});
-
-router.post('/admin/market/reset-pressure', requireAuth, (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  const { pair } = req.body;
-  if (markets_real[pair]) {
-    markets_real[pair].totalUp = 0;
-    markets_real[pair].totalDown = 0;
-  }
-  if (markets_demo[pair]) {
-    markets_demo[pair].totalUp = 0;
-    markets_demo[pair].totalDown = 0;
-  }
-  res.json({ success: true });
-});
-
-router.post('/admin/migrate-users', requireAuth, async (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  if (!adminDb) {
-    return res.status(400).json({ error: 'Firestore Admin DB is not initialized.' });
-  }
-  try {
-    const snapshot = await adminDb.collection('users').limit(1000).get();
-    if (snapshot.empty) {
-      return res.json({ migrated: 0, skipped: 0 });
-    }
-    
-    let migrated = 0;
-    let skipped = 0;
-    const batchSize = 50;
-    let i = 0;
-    while (i < snapshot.docs.length) {
-      await transaction(async (conn) => {
-        const batch = snapshot.docs.slice(i, i + batchSize);
-        for (const doc of batch) {
-          const fbData = doc.data();
-          const uid = doc.id;
-          const email = fbData.email || '';
-          
-          const rawReal = fbData.balance ?? fbData.real_balance ?? fbData.realBalance ?? 0;
-          const realBalance = parseFloat(rawReal.toString()) || 0;
-          const rawDemo = fbData.demoBalance ?? fbData.demo_balance ?? 10000;
-          const demoBalance = parseFloat(rawDemo.toString()) || 10000;
-          const isVerified = (fbData.isVerified || fbData.is_verified || fbData.emailVerified) ? 1 : 0;
-          const kycStatus = fbData.kycStatus || fbData.kyc_status || 'unverified';
-          const passwordValue = fbData.password_hash || fbData.passwordHash || fbData.password || null;
-          const displayName = fbData.displayName || fbData.display_name || '';
-          const nickname = fbData.nickname || '';
-          const photoURL = fbData.photoURL || fbData.photo_url || '';
-          const currency = fbData.currency || 'USD';
-          const country = fbData.country || '';
-          const countryCode = fbData.countryCode || fbData.country_code || '';
-          const is_admin = (fbData.isAdmin || fbData.is_admin) ? 1 : 0;
-          const referralCode = fbData.referralCode || fbData.referral_code || Math.random().toString(36).substring(2, 8).toUpperCase();
-          const referredByUid = fbData.referredBy || fbData.referred_by_uid || null;
-          const totalLiveVolume = fbData.totalLiveVolume || fbData.total_live_volume || '0.00';
-          const referralCount = fbData.referralCount || fbData.referral_count || 0;
-          const affiliateBalance = fbData.affiliateBalance || fbData.affiliate_balance || '0.00';
-          const totalAffiliateEarnings = fbData.totalAffiliateEarnings || fbData.total_affiliate_earnings || '0.00';
-
-          const user = await get('SELECT id FROM users WHERE uid = ?', [uid], conn) as any;
-
-          if (!user) {
-            await run(
-              `INSERT INTO users (uid, email, password_hash, display_name, nickname, photo_url, real_balance, demo_balance, currency, is_verified, is_admin, kyc_status, referral_code, referred_by_uid, total_live_volume, country, country_code, affiliate_balance, total_affiliate_earnings, referral_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                uid, email, passwordValue, displayName, nickname, photoURL, 
-                realBalance, demoBalance, currency, isVerified, is_admin, kycStatus, 
-                referralCode, referredByUid, totalLiveVolume.toString(), country, countryCode,
-                affiliateBalance.toString(), totalAffiliateEarnings.toString(), referralCount
-              ],
-              conn
-            );
-            migrated++;
-          } else {
-            skipped++;
-          }
-        }
-      });
-      i += batchSize;
-    }
-    res.json({ success: true, migrated, skipped });
-  } catch (err: any) {
-    logger.error(`Error migrating users: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/admin/delete-firestore-users', requireAuth, async (req: AuthRequest, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin only' });
-  const { confirm } = req.body;
-  if (confirm !== 'DELETE_ALL_FIRESTORE_USERS') {
-    return res.status(400).json({ error: 'Confirmation text is invalid' });
-  }
-  if (!adminDb) {
-    return res.status(400).json({ error: 'Firestore Admin DB is not initialized.' });
-  }
-  try {
-    const snapshot = await adminDb.collection('users').get();
-    const count = snapshot.size;
-    if (count > 0) {
-      const batch = adminDb.batch();
-      snapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-    }
-    res.json({ success: true, count });
-  } catch (err: any) {
-    logger.error(`Error deleting firestore users: ${err.message}`);
-    res.status(500).json({ error: err.message });
-  }
 });
 
 router.post('/admin/market/update', (req, res) => {
@@ -696,10 +541,8 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-router.post('/api/kyc', requireAuth, async (req: AuthRequest, res) => {
-  let { userId, kycData } = req.body;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+router.post('/api/kyc', async (req, res) => {
+  const { userId, kycData } = req.body;
   if (!userId || !kycData) return res.status(400).json({ error: 'Missing KYC data' });
 
   try {
@@ -831,10 +674,8 @@ router.post('/api/kyc', requireAuth, async (req: AuthRequest, res) => {
 
 // --- Admin & Support Routes ---
 
-router.get('/user/details', requireAuth, async (req: AuthRequest, res) => {
-  let uid = req.query.uid as string;
-  if (!req.user?.isAdmin) uid = req.user!.uid;
-  if (!uid) uid = req.user!.uid;
+router.get('/user/details', async (req, res) => {
+  const { uid } = req.query;
   if (!uid) return res.status(400).json({ error: 'UID is required' });
 
   try {
@@ -1327,54 +1168,11 @@ Trade Smart. Earn Big.`;
   }
 }
 
-export async function syncBackupsFromFirestore() {
-  if (!adminDb) return;
-  try {
-    const snap = await adminDb.collection('system_backups').get();
-    if (snap.empty) return;
-
-    for (const doc of snap.docs) {
-      const data = doc.data();
-      const backupId = doc.id;
-      const existing = await get('SELECT id FROM system_backups WHERE id = ?', [backupId]);
-      if (!existing) {
-        await run(
-          `INSERT INTO system_backups (id, timestamp, filename, size, status, tables_count, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            backupId,
-            data.timestamp || Date.now(),
-            data.filename || `backup_${backupId}.sql`,
-            data.size || 0,
-            data.status || 'success',
-            data.tables_count || 0,
-            data.created_by || 'admin'
-          ]
-        );
-      }
-    }
-  } catch (err: any) {
-    logger.error(`[syncBackupsFromFirestore] Error: ${err.message}`);
-  }
-}
-
 export async function syncDatabaseFromFirestore() {
-  logger.info('🔄 Starting full database synchronization with Firestore...');
+  logger.info('🔄 PostgreSQL is the sole source of truth. Skipping Firestore database synchronization to keep all production data intact.');
   try {
     // Ensure the seed admin exists and is up to date
     await ensureSeedAdminUser();
-
-    if (adminDb) {
-      logger.info('📥 Restoring Users, Balances, Trades, Transactions, KYC & Backups from Firestore Cloud...');
-      await syncAllUsersFromFirestore();
-      await syncGlobalTransactionsFromFirestore();
-      await syncKYCRequestsFromFirestore();
-      await syncTradesFromFirestore();
-      await syncBackupsFromFirestore();
-      logger.info('✅ Firestore Cloud synchronization completed successfully.');
-    } else {
-      logger.warn('⚠️ adminDb (Firestore) not available, skipping Firestore sync.');
-    }
 
     // Run news and promo seeding securely from server-side
     logger.info('📣 Seeding news and promos on server...');
@@ -1508,10 +1306,8 @@ export async function syncAllUsersFromFirestore() {
 }
 
 // 1. User Sync (called on app load / terminal boot)
-router.post('/user/sync', requireAuth, async (req: AuthRequest, res) => {
-  let uid = req.body.uid;
-  if (!req.user?.isAdmin) uid = req.user!.uid;
-  if (!uid) uid = req.user!.uid;
+router.post('/user/sync', async (req, res) => {
+  const { uid } = req.body;
   if (!uid) {
     logger.error('Sync failed: uid is missing');
     return res.status(400).json({ error: 'uid is required' });
@@ -1558,10 +1354,8 @@ router.post('/user/sync', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // 2. Check 2FA Configuration
-router.get('/user/check-2fa', requireAuth, async (req: AuthRequest, res) => {
-  let uid = req.query.uid as string;
-  if (!req.user?.isAdmin) uid = req.user!.uid;
-  if (!uid) uid = req.user!.uid;
+router.get('/user/check-2fa', async (req, res) => {
+  const { uid } = req.query;
   if (!uid) return res.status(400).json({ error: 'uid is required' });
 
   try {
@@ -1694,10 +1488,8 @@ router.patch('/users/:id', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // 4. Fetch User Trades
-router.get('/user-trades', requireAuth, async (req: AuthRequest, res) => {
-  let userId = req.query.userId as string;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+router.get('/user-trades', async (req, res) => {
+  const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   
   try {
@@ -1712,10 +1504,8 @@ router.get('/user-trades', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // 5. Fetch User Tickets
-router.get('/user-tickets', requireAuth, async (req: AuthRequest, res) => {
-  let userId = req.query.userId as string;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+router.get('/user-tickets', async (req, res) => {
+  const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
 
   try {
@@ -1836,10 +1626,9 @@ router.get('/affiliate_postbacks', async (req, res) => {
 });
 
 // Support Tickets List
-router.get('/tickets', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    let { status, category, search, assignedAgentId, userId } = req.query as any;
-    if (!req.user?.isAdmin) userId = req.user!.uid;
+router.get('/tickets', async (req, res) => {
+    try {
+        const { status, category, search, assignedAgentId, userId } = req.query as any;
         let sql = 'SELECT * FROM tickets WHERE 1=1';
         const params: any[] = [];
 
@@ -1874,10 +1663,9 @@ router.get('/tickets', requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-router.get('/support/tickets', requireAuth, async (req: AuthRequest, res) => {
-  try {
-    let { status, category, search, assignedAgentId, userId } = req.query as any;
-    if (!req.user?.isAdmin) userId = req.user!.uid;
+router.get('/support/tickets', async (req, res) => {
+    try {
+        const { status, category, search, assignedAgentId, userId } = req.query as any;
         let sql = 'SELECT * FROM tickets WHERE 1=1';
         const params: any[] = [];
 
@@ -2211,7 +1999,7 @@ router.post('/support/reply', async (req, res) => {
 });
 
 // User 360° Support Context Endpoint for Agents
-router.get('/support/user-context/:userId', requireAdmin, async (req: AuthRequest, res) => {
+router.get('/support/user-context/:userId', async (req, res) => {
   const { userId } = req.params;
 
   try {
@@ -2353,10 +2141,8 @@ import { settleTrade } from '../services/tradeService.ts';
 import { createDeposit } from '../services/gopayService.ts';
 
 // 10. Trade Placement (Compatibility with frontend)
-router.post('/trade', requireAuth, async (req: AuthRequest, res) => {
-  let { pair, amount, direction, accountType, userId, tournamentId, trade } = req.body;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+router.post('/trade', async (req, res) => {
+  const { pair, amount, direction, accountType, userId, tournamentId, trade } = req.body;
   if (!userId || !pair || !amount) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -2519,7 +2305,7 @@ router.post('/masterTraders', async (req, res) => {
     );
     res.json({ id });
   } catch (err) {
-    logger.error("MasterTrader err: " + err.message); res.status(500).json({ error: 'Failed to create master trader' });
+    res.status(500).json({ error: 'Failed to create master trader' });
   }
 });
 
@@ -2636,10 +2422,8 @@ router.get('/trades/history', requireAuth, async (req: AuthRequest, res) => {
   res.json(history);
 });
 
-router.get('/user-trades', requireAuth, async (req: AuthRequest, res) => {
-  let userId = req.query.userId as string;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+router.get('/user-trades', async (req, res) => {
+  const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   try {
     const trades = await query('SELECT * FROM trades WHERE user_id = ? ORDER BY created_at DESC LIMIT 200', [userId]);
@@ -4214,9 +3998,7 @@ Respond strictly in JSON matching the schema:
 
 // 2. Submit KYC verification application (linked with Firestore)
 router.post('/kyc', requireAuth, async (req: AuthRequest, res) => {
-  let { userId, kycData } = req.body;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+  const { userId, kycData } = req.body;
   if (!userId || !kycData) {
     return res.status(400).json({ error: 'Missing required parameters' });
   }
@@ -4282,10 +4064,8 @@ router.post('/kyc', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // 3. Get latest KYC status of user
-router.get('/user/kyc-status', requireAuth, async (req: AuthRequest, res) => {
-  let userId = req.query.userId as string;
-  if (!req.user?.isAdmin) userId = req.user!.uid;
-  if (!userId) userId = req.user!.uid;
+router.get('/user/kyc-status', async (req, res) => {
+  const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   try {
     let snap;

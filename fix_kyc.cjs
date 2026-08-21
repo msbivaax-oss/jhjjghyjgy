@@ -1,9 +1,17 @@
 const fs = require('fs');
 let content = fs.readFileSync('src/api/routes.ts', 'utf-8');
 
-content = content.replace(
-  /router\.post\('\/api\/kyc', async \(req, res\) => \{\n\s*const \{ userId, kycData \} = req\.body;/g,
-  `router.post('/api/kyc', requireAuth, async (req: AuthRequest, res) => {\n  let { userId, kycData } = req.body;\n  if (!req.user?.isAdmin) userId = req.user!.uid;\n  if (!userId) userId = req.user!.uid;`
-);
+const injection = `
+router.get('/kyc', (req, res) => {
+    res.json([]);
+});
+router.post('/kyc', (req, res) => {
+    res.json({ success: true });
+});
+`;
 
-fs.writeFileSync('src/api/routes.ts', content);
+if (!content.includes("router.get('/kyc'")) {
+    content = content.replace("router.get('/tournaments'", injection + "\nrouter.get('/tournaments'");
+    fs.writeFileSync('src/api/routes.ts', content);
+    console.log('Injected /kyc');
+}

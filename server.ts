@@ -316,10 +316,7 @@ Sitemap: https://bivaax.com/sitemap.xml`);
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
-        allowedHosts: true,
-        hmr: {
-          port: 24679 // Use a different port than default to avoid EADDRINUSE
-        }
+        allowedHosts: true 
       },
       appType: "spa",
     });
@@ -371,18 +368,6 @@ Sitemap: https://bivaax.com/sitemap.xml`);
   } catch (err: any) {
     console.warn('⚠️ [SAFE-DEPLOYMENT] Pre-boot backup skipped/failed:', err.message);
   }
-
-  httpServer.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use. Retrying in 2s...`);
-      setTimeout(() => {
-        httpServer.close();
-        httpServer.listen(PORT, "0.0.0.0");
-      }, 2000);
-    } else {
-      console.error('❌ Server listen error:', err);
-    }
-  });
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
