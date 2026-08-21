@@ -1327,11 +1327,54 @@ Trade Smart. Earn Big.`;
   }
 }
 
+export async function syncBackupsFromFirestore() {
+  if (!adminDb) return;
+  try {
+    const snap = await adminDb.collection('system_backups').get();
+    if (snap.empty) return;
+
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      const backupId = doc.id;
+      const existing = await get('SELECT id FROM system_backups WHERE id = ?', [backupId]);
+      if (!existing) {
+        await run(
+          `INSERT INTO system_backups (id, timestamp, filename, size, status, tables_count, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            backupId,
+            data.timestamp || Date.now(),
+            data.filename || `backup_${backupId}.sql`,
+            data.size || 0,
+            data.status || 'success',
+            data.tables_count || 0,
+            data.created_by || 'admin'
+          ]
+        );
+      }
+    }
+  } catch (err: any) {
+    logger.error(`[syncBackupsFromFirestore] Error: ${err.message}`);
+  }
+}
+
 export async function syncDatabaseFromFirestore() {
-  logger.info('🔄 PostgreSQL is the sole source of truth. Skipping Firestore database synchronization to keep all production data intact.');
+  logger.info('🔄 Starting full database synchronization with Firestore...');
   try {
     // Ensure the seed admin exists and is up to date
     await ensureSeedAdminUser();
+
+    if (adminDb) {
+      logger.info('📥 Restoring Users, Balances, Trades, Transactions, KYC & Backups from Firestore Cloud...');
+      await syncAllUsersFromFirestore();
+      await syncGlobalTransactionsFromFirestore();
+      await syncKYCRequestsFromFirestore();
+      await syncTradesFromFirestore();
+      await syncBackupsFromFirestore();
+      logger.info('✅ Firestore Cloud synchronization completed successfully.');
+    } else {
+      logger.warn('⚠️ adminDb (Firestore) not available, skipping Firestore sync.');
+    }
 
     // Run news and promo seeding securely from server-side
     logger.info('📣 Seeding news and promos on server...');

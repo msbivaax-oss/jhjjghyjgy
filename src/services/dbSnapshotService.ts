@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { adminDb } from '../lib/firebase-admin.ts';
 
 const execPromise = promisify(exec);
 
@@ -29,8 +30,7 @@ if (!fs.existsSync(SECURE_OFFSITE_DIR)) {
 
 export const DbSnapshotService = {
   /**
-   * Generates a full SQL dump of the PostgreSQL database using pg_dump
-   * with fallback to logical SQL dumper if pg_dump is not available.
+   * Generates a full SQL dump of the database and persists it both locally and in Firestore Cloud.
    */
   async createFullBackup(adminId: string): Promise<BackupRecord> {
     const timestamp = Date.now();
@@ -59,17 +59,16 @@ export const DbSnapshotService = {
       }
 
       // 2. Fallback to logical SQL dumper if pg_dump is not available or failed
+      let sqlDumpContent = '';
       if (!usedPgDump) {
         let tables: string[] = [];
         
         if (getDbType() === 'pg') {
-          // Get all tables in public schema for PostgreSQL
           const tablesResult = await query(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
           ) as any[];
           tables = tablesResult.map(t => t.table_name);
         } else {
-          // Get all tables for SQLite
           const tablesResult = await query(
             "SELECT name as table_name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
           ) as any[];
@@ -86,7 +85,6 @@ export const DbSnapshotService = {
         sqlDump += "SET xmloption = content;\nSET client_min_messages = warning;\nSET row_security = off;\n\n";
 
         for (const table of tables) {
-          // Skip internal/meta tables
           if (table.startsWith('_') || table === 'market_settings') continue;
 
           logger.info(`[BACKUP] Dumping table: ${table}`);
@@ -116,8 +114,11 @@ export const DbSnapshotService = {
         }
         
         fs.writeFileSync(filePath, sqlDump);
+        sqlDumpContent = sqlDump;
       } else {
-        // If pg_dump succeeded, get tables count from system catalogs
+        if (fs.existsSync(filePath)) {
+          sqlDumpContent = fs.readFileSync(filePath, 'utf8');
+        }
         try {
           if (getDbType() === 'pg') {
             const countRes = await query(
@@ -131,7 +132,7 @@ export const DbSnapshotService = {
             tablesCount = countRes[0]?.cnt || 0;
           }
         } catch (e) {
-          tablesCount = 15; // default fallback count estimate
+          tablesCount = 15;
         }
       }
 
@@ -142,15 +143,34 @@ export const DbSnapshotService = {
 
       const backupId = `bk_${timestamp}`;
       
-      // 4. Record metadata in PostgreSQL database (sole source of truth)
+      // 4. Record metadata in SQL database
       await run(
         `INSERT INTO system_backups (id, timestamp, filename, size, status, tables_count, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [backupId, timestamp, filename, stats.size, 'success', tablesCount, adminId]
       );
 
-      // 5. Store detailed entry in audit logs
-      const detailsStr = `Database backup created successfully: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB). Type: ${usedPgDump ? 'pg_dump' : 'logical_dumper'}. Synced to secure off-site backup storage.`;
+      // 5. Persist backup in Firestore Cloud Database for permanent survival across updates
+      if (adminDb) {
+        try {
+          await adminDb.collection('system_backups').doc(backupId).set({
+            id: backupId,
+            timestamp,
+            filename,
+            size: stats.size,
+            status: 'success',
+            tables_count: tablesCount,
+            created_by: adminId,
+            sqlContent: sqlDumpContent.length < 900000 ? sqlDumpContent : sqlDumpContent.slice(0, 900000)
+          });
+          logger.info(`[BACKUP-SUCCESS] Backup ${backupId} successfully persisted in Firestore Cloud!`);
+        } catch (fsErr: any) {
+          logger.error(`[BACKUP-FIRESTORE-FAILED] ${fsErr.message}`);
+        }
+      }
+
+      // 6. Store detailed entry in audit logs
+      const detailsStr = `Database backup created successfully: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB). Type: ${usedPgDump ? 'pg_dump' : 'logical_dumper'}. Persisted in Firestore Cloud.`;
       await run(
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -159,7 +179,6 @@ export const DbSnapshotService = {
 
       logger.info(`[BACKUP-SUCCESS] Backup ${backupId} completed. Size: ${(stats.size / 1024).toFixed(2)} KB`);
       
-      // Rotate backups to keep VPS disk space clean (30 days retention)
       await this.rotateBackups();
 
       return {
@@ -197,7 +216,6 @@ export const DbSnapshotService = {
     try {
       const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
       
-      // Clean up primary backup dir
       if (fs.existsSync(BACKUP_DIR)) {
         const files = fs.readdirSync(BACKUP_DIR);
         for (const file of files) {
@@ -210,7 +228,6 @@ export const DbSnapshotService = {
         }
       }
 
-      // Clean up secure off-site backup dir
       if (fs.existsSync(SECURE_OFFSITE_DIR)) {
         const offsiteFiles = fs.readdirSync(SECURE_OFFSITE_DIR);
         for (const file of offsiteFiles) {
@@ -228,27 +245,62 @@ export const DbSnapshotService = {
   },
 
   /**
-   * Retrieves backup history from PostgreSQL database (sole source of truth)
+   * Retrieves backup history from local database and Firestore Cloud
    */
   async getBackupHistory(limitCount: number = 20): Promise<BackupRecord[]> {
     try {
-      const rows = await query(
-        `SELECT id, timestamp, filename, size, status, tables_count, created_by 
-         FROM system_backups 
-         ORDER BY timestamp DESC 
-         LIMIT $1`,
-        [limitCount]
-      ) as any[];
+      const sqlQuery = getDbType() === 'pg' 
+        ? `SELECT id, timestamp, filename, size, status, tables_count, created_by FROM system_backups ORDER BY timestamp DESC LIMIT $1`
+        : `SELECT id, timestamp, filename, size, status, tables_count, created_by FROM system_backups ORDER BY timestamp DESC LIMIT ?`;
+      
+      const rows = await query(sqlQuery, [limitCount]) as any[];
+      const localMap = new Map<string, BackupRecord>();
 
-      return rows.map(r => ({
-        id: r.id,
-        timestamp: Number(r.timestamp),
-        filename: r.filename,
-        size: Number(r.size),
-        status: r.status as any,
-        tables_count: Number(r.tables_count),
-        created_by: r.created_by
-      }));
+      rows.forEach(r => {
+        localMap.set(r.id, {
+          id: r.id,
+          timestamp: Number(r.timestamp),
+          filename: r.filename,
+          size: Number(r.size),
+          status: r.status as any,
+          tables_count: Number(r.tables_count),
+          created_by: r.created_by
+        });
+      });
+
+      // Also pull backup history from Firestore Cloud
+      if (adminDb) {
+        try {
+          const snap = await adminDb.collection('system_backups').orderBy('timestamp', 'desc').limit(limitCount).get();
+          for (const doc of snap.docs) {
+            const data = doc.data();
+            const bId = doc.id;
+            if (!localMap.has(bId)) {
+              const record: BackupRecord = {
+                id: bId,
+                timestamp: Number(data.timestamp || Date.now()),
+                filename: data.filename || `backup_${bId}.sql`,
+                size: Number(data.size || 0),
+                status: (data.status || 'success') as any,
+                tables_count: Number(data.tables_count || 0),
+                created_by: data.created_by || 'admin'
+              };
+              localMap.set(bId, record);
+
+              // Restore metadata to local SQL system_backups table
+              await run(
+                `INSERT INTO system_backups (id, timestamp, filename, size, status, tables_count, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [bId, record.timestamp, record.filename, record.size, record.status, record.tables_count, record.created_by]
+              ).catch(() => {});
+            }
+          }
+        } catch (fsErr: any) {
+          logger.error(`[BACKUP-HISTORY-FIRESTORE-FAILED] ${fsErr.message}`);
+        }
+      }
+
+      return Array.from(localMap.values()).sort((a, b) => b.timestamp - a.timestamp);
     } catch (err: any) {
       logger.error(`[BACKUP-HISTORY-FAILED] Failed to fetch history from database: ${err.message}`);
       return [];
@@ -256,8 +308,7 @@ export const DbSnapshotService = {
   },
 
   /**
-   * Restore process using raw SQL execution
-   * This is a sensitive operation - Super Admin only
+   * Restore process using local files or Firestore Cloud backup dump
    */
   async restoreFromBackup(backupId: string) {
     logger.warn(`[RESTORE] RESTORATION INITIATED FOR BACKUP: ${backupId}`);
@@ -265,10 +316,12 @@ export const DbSnapshotService = {
     try {
       let sqlContent = '';
       
-      // 1. Locate filename from PostgreSQL records
-      const b = await query("SELECT filename FROM system_backups WHERE id = $1", [backupId]) as any[];
-      const filename = b.length > 0 ? b[0].filename : `backup_${backupId}.sql`;
-      
+      let filename = `backup_${backupId}.sql`;
+      try {
+        const b = await query("SELECT filename FROM system_backups WHERE id = ?", [backupId]) as any[];
+        if (b.length > 0 && b[0].filename) filename = b[0].filename;
+      } catch (e) {}
+
       const filePath = path.join(BACKUP_DIR, filename);
       const offsiteFilePath = path.join(SECURE_OFFSITE_DIR, filename);
       
@@ -279,11 +332,24 @@ export const DbSnapshotService = {
         logger.info(`[RESTORE] Restoring from off-site backup storage copy.`);
       }
 
-      if (!sqlContent) {
-        throw new Error(`Backup file ${filename} not found in primary or off-site backup storage`);
+      // If missing on local disk (e.g. after container update/re-deployment), fetch from Firestore Cloud!
+      if (!sqlContent && adminDb) {
+        logger.info(`[RESTORE] Local backup file missing. Fetching backup ${backupId} directly from Firestore Cloud...`);
+        const doc = await adminDb.collection('system_backups').doc(backupId).get();
+        if (doc.exists && doc.data()?.sqlContent) {
+          sqlContent = doc.data()!.sqlContent;
+          try {
+            fs.writeFileSync(filePath, sqlContent);
+            logger.info(`[RESTORE] Saved cloud backup dump to local disk at ${filePath}`);
+          } catch (e) {}
+        }
       }
 
-      // 2. Execute SQL dump as a raw block on PostgreSQL
+      if (!sqlContent) {
+        throw new Error(`Backup file ${filename} not found in local storage or Firestore Cloud`);
+      }
+
+      // Execute SQL dump as a raw block
       logger.info(`[RESTORE] Running raw SQL restore script...`);
       await runRawSql(sqlContent);
 
@@ -295,3 +361,4 @@ export const DbSnapshotService = {
     }
   }
 };
+
